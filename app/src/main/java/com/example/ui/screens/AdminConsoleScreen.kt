@@ -122,7 +122,8 @@ fun AdminConsoleScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // weight(1f) leaves room for the badge; without it the badge collapses and its text wraps letter by letter
+                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
@@ -148,12 +149,14 @@ fun AdminConsoleScreen(
                                 color = Color.White
                             )
                             Text(
-                                text = "Rajagiri Institutional Welfare Directorate",
+                                text = "Student-run moderation team",
                                 fontSize = 11.sp,
                                 color = Color(0xFF94A3B8)
                             )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -161,7 +164,7 @@ fun AdminConsoleScreen(
                         border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold)
                     ) {
                         Text(
-                            text = "OFFICER ACCESS",
+                            text = "MODERATOR",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -345,7 +348,7 @@ fun AdminConsoleScreen(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "Institutional policy requires Campus Safety Officers to specify an official investigation reason before accessing chat archives.",
+                        text = "Moderators must give a reason before opening a chat. Every access is recorded in the audit log.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

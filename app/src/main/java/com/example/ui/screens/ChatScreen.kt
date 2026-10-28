@@ -180,7 +180,7 @@ fun ChatScreen(
                         }
                         Text(
                             text = if (shouldShowOfficerBadges)
-                                "Campus Safety Directorate • Official Moderation"
+                                "RSETSparks moderator"
                             else
                                 "${partner.department} • Class of '${partner.year.toString().takeLast(2)}",
                             fontSize = 11.sp,
