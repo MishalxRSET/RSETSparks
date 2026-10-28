@@ -158,9 +158,10 @@ private fun SignedInApp(viewModel: RSETSparksViewModel, credentialManager: Crede
     val me = currentUser ?: return
 
     // Ask once for notification permission (Android 13+) when the student first reaches the app.
+    // Skipped on the Spark plan, where no Cloud Functions send pushes.
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (BuildConfig.BLAZE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
