@@ -1,68 +1,30 @@
 package com.example
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.SwitchAccount
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.credentials.CredentialManager
-import com.example.data.AppDatabase
-import com.example.security.FirebaseAuthHelper
-import com.example.security.FirebaseAuthService
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.animation.Crossfade
 import com.example.ui.components.CampusTopHeader
 import com.example.ui.components.RSETSparksBottomNav
 import com.example.ui.components.RSETSparksLoadingOverlay
@@ -71,32 +33,96 @@ import com.example.ui.screens.AdminConsoleScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatScreen
 import com.example.ui.screens.DiscoveryScreen
+import com.example.ui.screens.FirebaseSetupScreen
 import com.example.ui.screens.MatchDialog
 import com.example.ui.screens.MatchesScreen
+import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.ReportDialog
-import com.example.ui.theme.AmberGold
-import com.example.ui.theme.CoralAccent
-import com.example.ui.theme.CrimsonPrimary
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.RSETSparksViewModel
 import com.example.ui.viewmodel.Screen
+import com.example.ui.viewmodel.SessionState
 
 class MainActivity : ComponentActivity() {
+    private val viewModel: RSETSparksViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Keep the branded system splash up until we know whether the student is signed in.
+        splash.setKeepOnScreenCondition { viewModel.session.value is SessionState.Loading }
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                RSETSparksApp()
+                RSETSparksApp(viewModel)
             }
         }
     }
 }
 
 @Composable
-fun RSETSparksApp(viewModel: RSETSparksViewModel = viewModel()) {
+fun RSETSparksApp(viewModel: RSETSparksViewModel) {
     val context = LocalContext.current
+    val credentialManager = remember { CredentialManager.create(context) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val session by viewModel.session.collectAsStateWithLifecycle()
+    val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
+    val isActionLoading by viewModel.isActionLoading.collectAsStateWithLifecycle()
+    val loadingStatusMessage by viewModel.loadingStatusMessage.collectAsStateWithLifecycle()
+
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearToast()
+        }
+    }
+
+    RSETSparksLoadingOverlay(
+        isLoading = isActionLoading,
+        statusText = loadingStatusMessage ?: "Please wait..."
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            snackbarHost = { SnackbarHost(snackbarHostState) }
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                AnimatedContent(
+                    targetState = session,
+                    contentKey = { it::class }, // Profile updates within a state shouldn't re-animate
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "session"
+                ) { s ->
+                    when (s) {
+                        SessionState.Loading -> RSETSparksSplashScreen(statusText = "Connecting to campus...")
+                        SessionState.FirebaseNotConfigured -> FirebaseSetupScreen()
+                        SessionState.SignedOut, is SessionState.AwaitingEmailVerification -> AuthScreen(
+                            awaitingVerificationEmail = (s as? SessionState.AwaitingEmailVerification)?.email,
+                            onGoogleSignIn = { viewModel.signInWithGoogle(context, credentialManager) },
+                            onEmailSignIn = viewModel::signInWithEmail,
+                            onEmailSignUp = viewModel::signUpWithEmail,
+                            onForgotPassword = viewModel::sendPasswordReset,
+                            onCheckVerification = viewModel::checkEmailVerificationNow,
+                            onResendVerification = viewModel::resendVerificationEmail,
+                            onSignOut = { viewModel.signOut(credentialManager) }
+                        )
+                        is SessionState.NeedsProfile -> OnboardingScreen(
+                            email = s.email,
+                            suggestedName = s.suggestedName,
+                            onSubmit = viewModel::completeProfile,
+                            onSignOut = { viewModel.signOut(credentialManager) }
+                        )
+                        is SessionState.Ready -> SignedInApp(viewModel, credentialManager)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignedInApp(viewModel: RSETSparksViewModel, credentialManager: CredentialManager) {
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val currentScreen by viewModel.currentScreen.collectAsStateWithLifecycle()
     val discoveryCandidates by viewModel.discoveryCandidates.collectAsStateWithLifecycle()
@@ -108,51 +134,22 @@ fun RSETSparksApp(viewModel: RSETSparksViewModel = viewModel()) {
     val adminUsersList by viewModel.adminUsersList.collectAsStateWithLifecycle()
     val auditLogsList by viewModel.auditLogsList.collectAsStateWithLifecycle()
     val pendingReportsCount by viewModel.pendingReportsCount.collectAsStateWithLifecycle()
-    val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
-    val isAppInitializing by viewModel.isAppInitializing.collectAsStateWithLifecycle()
-    val isActionLoading by viewModel.isActionLoading.collectAsStateWithLifecycle()
-    val loadingStatusMessage by viewModel.loadingStatusMessage.collectAsStateWithLifecycle()
-    val awaitingVerificationEmail by viewModel.awaitingVerificationEmail.collectAsStateWithLifecycle()
 
-    val coroutineScope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    val me = currentUser ?: return
 
-    LaunchedEffect(toastMessage) {
-        toastMessage?.let { msg ->
-            snackbarHostState.showSnackbar(msg)
-            viewModel.clearToast()
-        }
-    }
-
-    // Secondary screen back handler
-    BackHandler(enabled = !isAppInitializing && currentScreen !is Screen.DISCOVERY && currentScreen !is Screen.AUTH) {
+    BackHandler(enabled = currentScreen !is Screen.DISCOVERY) {
         when (currentScreen) {
             is Screen.CHAT -> viewModel.navigateTo(Screen.MATCHES)
             else -> viewModel.navigateTo(Screen.DISCOVERY)
         }
     }
 
-    Crossfade(
-        targetState = isAppInitializing,
-        label = "splash_crossfade"
-    ) { initializing ->
-        if (initializing) {
-            RSETSparksSplashScreen(
-                statusText = loadingStatusMessage ?: "Connecting Rajagiri Campus..."
-            )
-        } else {
-            RSETSparksLoadingOverlay(
-                isLoading = isActionLoading,
-                statusText = loadingStatusMessage ?: "Please wait..."
-            ) {
-                Scaffold(
+    Scaffold(
         modifier = Modifier.fillMaxSize(),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (currentScreen !is Screen.AUTH && currentScreen !is Screen.CHAT) {
+            if (currentScreen !is Screen.CHAT) {
                 CampusTopHeader(
-                    currentUser = currentUser,
+                    currentUser = me,
                     pendingReportsCount = pendingReportsCount,
                     onAdminClick = { viewModel.navigateTo(Screen.ADMIN) },
                     onProfileClick = { viewModel.navigateTo(Screen.PROFILE) }
@@ -160,11 +157,11 @@ fun RSETSparksApp(viewModel: RSETSparksViewModel = viewModel()) {
             }
         },
         bottomBar = {
-            if (currentScreen !is Screen.AUTH && currentScreen !is Screen.CHAT) {
+            if (currentScreen !is Screen.CHAT) {
                 RSETSparksBottomNav(
                     currentScreen = currentScreen,
                     pendingReportsCount = pendingReportsCount,
-                    isAdminUser = currentUser?.isAdmin == true,
+                    isAdminUser = me.isAdmin,
                     onNavigate = { viewModel.navigateTo(it) }
                 )
             }
@@ -181,160 +178,78 @@ fun RSETSparksApp(viewModel: RSETSparksViewModel = viewModel()) {
                 label = "screen_transition"
             ) { screen ->
                 when (screen) {
-                    is Screen.AUTH -> {
-                        AuthScreen(
-                            onLogin = { email, cb -> viewModel.login(email, cb) },
-                            onRegister = { email, name, age, dept, year, bio, interests, emoji, cb ->
-                                viewModel.register(email, name, age, dept, year, bio, interests, emoji, cb)
+                    is Screen.AUTH, is Screen.DISCOVERY -> DiscoveryScreen(
+                        candidates = discoveryCandidates,
+                        onSwipe = { target, action -> viewModel.swipeCard(target, action) },
+                        onReportUser = { target -> viewModel.openReportDialog(target) },
+                        onResetDeck = { viewModel.resetDiscoveryDeck() }
+                    )
+                    is Screen.MATCHES -> MatchesScreen(
+                        matches = matches,
+                        onSelectPartner = { partner -> viewModel.navigateTo(Screen.CHAT(partner)) },
+                        onExploreSparksClick = { viewModel.navigateTo(Screen.DISCOVERY) }
+                    )
+                    is Screen.CHAT -> ChatScreen(
+                        currentUser = me,
+                        partner = screen.partner,
+                        messages = chatMessages,
+                        onSendMessage = { text -> viewModel.sendMessage(text) },
+                        onReportUser = { target -> viewModel.openReportDialog(target) },
+                        onBlockUser = { target -> viewModel.blockUser(target) },
+                        onUnmatch = { target -> viewModel.unmatch(target) },
+                        onBack = { viewModel.navigateTo(Screen.MATCHES) }
+                    )
+                    is Screen.ADMIN -> if (me.isAdmin) {
+                        AdminConsoleScreen(
+                            currentAdmin = me,
+                            reports = reportsList,
+                            allUsers = adminUsersList,
+                            auditLogs = auditLogsList,
+                            onResolveReport = { id, status, note, suspend ->
+                                viewModel.adminResolveReport(id, status, note, suspend)
                             },
-                            onRegisterProfile = { profile, cb ->
-                                viewModel.registerProfile(profile, cb)
+                            onToggleSuspension = { userId, suspend, reason ->
+                                viewModel.adminToggleSuspension(userId, suspend, reason)
                             },
-                            awaitingVerificationEmail = awaitingVerificationEmail,
-                            onCheckEmailVerificationLive = { onComplete ->
-                                viewModel.checkEmailVerificationLive {
-                                    onComplete(true)
-                                }
+                            onToggleVerification = { userId, verified ->
+                                viewModel.adminToggleVerification(userId, verified)
                             },
-                            onResendVerificationLink = { cb ->
-                                viewModel.resendVerificationEmail(cb)
+                            onEmergencyAuditUser = { userId, justification, cb ->
+                                viewModel.adminEmergencyAuditUser(userId, justification, cb)
                             },
-                            onClearAwaitingVerification = {
-                                viewModel.setAwaitingVerificationEmail(null)
-                            },
-                            onGoogleSignIn = {
-                                coroutineScope.launch {
-                                    val db = AppDatabase.getDatabase(context)
-                                    val authService = FirebaseAuthService.getInstance(db.userProfileDao(), db.userDao())
-                                    val result = authService.signInWithGoogle(context, credentialManager)
-                                    if (result.isSuccess) {
-                                        val firebaseUser = result.getOrNull()
-                                        val verifiedEmail = firebaseUser?.email ?: ""
-                                        viewModel.loginWithGoogle(verifiedEmail, firebaseUser?.displayName) { success, err ->
-                                            if (!success) {
-                                                Toast.makeText(context, err ?: "Authentication failed", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    } else {
-                                        val err = result.exceptionOrNull()?.message ?: "Google Sign-In failed"
-                                        Toast.makeText(context, err, Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                            }
+                            onToggleAdminBadges = { showBadges -> viewModel.toggleAdminShowBadges(showBadges) }
                         )
                     }
-                    is Screen.DISCOVERY -> {
-                        DiscoveryScreen(
-                            candidates = discoveryCandidates,
-                            onSwipe = { target, action -> viewModel.swipeCard(target, action) },
-                            onReportUser = { target -> viewModel.openReportDialog(target) },
-                            onResetDeck = {
-                                viewModel.resetDiscoveryDeck()
-                            }
-                        )
-                    }
-                    is Screen.MATCHES -> {
-                        MatchesScreen(
-                            matches = matches,
-                            onSelectPartner = { partner -> viewModel.navigateTo(Screen.CHAT(partner)) },
-                            onExploreSparksClick = { viewModel.navigateTo(Screen.DISCOVERY) }
-                        )
-                    }
-                    is Screen.CHAT -> {
-                        if (currentUser != null) {
-                            ChatScreen(
-                                currentUser = currentUser!!,
-                                partner = screen.partner,
-                                messages = chatMessages,
-                                onSendMessage = { text -> viewModel.sendMessage(text) },
-                                onReportUser = { target -> viewModel.openReportDialog(target) },
-                                onBack = { viewModel.navigateTo(Screen.MATCHES) }
-                            )
-                        }
-                    }
-                    is Screen.ADMIN -> {
-                        if (currentUser != null && currentUser!!.isAdmin) {
-                            AdminConsoleScreen(
-                                currentAdmin = currentUser!!,
-                                reports = reportsList,
-                                allUsers = adminUsersList,
-                                auditLogs = auditLogsList,
-                                onResolveReport = { id, status, note, suspend ->
-                                    viewModel.adminResolveReport(id, status, note, suspend)
-                                },
-                                onToggleSuspension = { userId, suspend, reason ->
-                                    viewModel.adminToggleSuspension(userId, suspend, reason)
-                                },
-                                onToggleVerification = { userId, verified ->
-                                    viewModel.adminToggleVerification(userId, verified)
-                                },
-                                onEmergencyAuditUser = { userId, justification, cb ->
-                                    viewModel.adminEmergencyAuditUser(userId, justification, cb)
-                                },
-                                onToggleAdminBadges = { showBadges ->
-                                    viewModel.toggleAdminShowBadges(showBadges)
-                                }
-                            )
-                        } else {
-                            viewModel.navigateTo(Screen.DISCOVERY)
-                        }
-                    }
-                    is Screen.PROFILE -> {
-                        if (currentUser != null) {
-                            ProfileScreen(
-                                currentUser = currentUser!!,
-                                onAdminClick = { viewModel.navigateTo(Screen.ADMIN) },
-                                onLogout = {
-                                    FirebaseAuthHelper.signOut(
-                                        context = context,
-                                        credentialManager = credentialManager,
-                                        onSignOutComplete = { viewModel.logout() },
-                                        scope = coroutineScope
-                                    )
-                                },
-                                onToggleSparksVisibility = { isVisible ->
-                                    viewModel.toggleSparksVisibility(isVisible)
-                                },
-                                onToggleAdminBadges = { showBadges ->
-                                    viewModel.toggleAdminShowBadges(showBadges)
-                                }
-                            )
-                        }
-                    }
+                    is Screen.PROFILE -> ProfileScreen(
+                        currentUser = me,
+                        onAdminClick = { viewModel.navigateTo(Screen.ADMIN) },
+                        onLogout = { viewModel.signOut(credentialManager) },
+                        onDeleteAccount = { viewModel.deleteAccount(credentialManager) },
+                        onToggleSparksVisibility = { isVisible -> viewModel.toggleSparksVisibility(isVisible) },
+                        onToggleAdminBadges = { showBadges -> viewModel.toggleAdminShowBadges(showBadges) }
+                    )
                 }
             }
         }
     }
-}
-}
-}
 
-    // Mutual Match Celebration Dialog
-    if (newMatchUser != null && currentUser != null) {
+    newMatchUser?.let { matched ->
         MatchDialog(
-            currentUser = currentUser!!,
-            matchedUser = newMatchUser!!,
+            currentUser = me,
+            matchedUser = matched,
             onSendMessageClick = {
-                val partner = newMatchUser!!
                 viewModel.dismissMatchPopup()
-                viewModel.navigateTo(Screen.CHAT(partner))
+                viewModel.navigateTo(Screen.CHAT(matched))
             },
-            onKeepSwipingClick = {
-                viewModel.dismissMatchPopup()
-            }
+            onKeepSwipingClick = { viewModel.dismissMatchPopup() }
         )
     }
 
-    // Incident Reporting Dialog
-    if (reportingTargetUser != null) {
+    reportingTargetUser?.let { target ->
         ReportDialog(
-            targetUser = reportingTargetUser!!,
-            onSubmitReport = { cat, desc ->
-                viewModel.submitReport(cat, desc)
-            },
-            onDismiss = {
-                viewModel.dismissReportDialog()
-            }
+            targetUser = target,
+            onSubmitReport = { cat, desc, alsoBlock -> viewModel.submitReport(cat, desc, alsoBlock) },
+            onDismiss = { viewModel.dismissReportDialog() }
         )
     }
 }

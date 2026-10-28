@@ -23,13 +23,32 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SwitchAccount
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import com.example.BuildConfig
+import com.example.R
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -65,10 +84,38 @@ fun ProfileScreen(
     currentUser: UserEntity,
     onAdminClick: () -> Unit,
     onLogout: () -> Unit,
+    onDeleteAccount: () -> Unit,
     onToggleSparksVisibility: (Boolean) -> Unit = {},
     onToggleAdminBadges: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    fun openUrl(resId: Int) {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(context.getString(resId)))) }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Delete your account?") },
+            text = {
+                Text(
+                    "This permanently deletes your profile, photo, swipes, matches and the messages you sent. " +
+                        "Safety reports filed about other students are kept for moderation. This can't be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showDeleteConfirm = false; onDeleteAccount() },
+                    modifier = Modifier.testTag("confirm_delete_account_button")
+                ) { Text("Delete permanently", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -107,7 +154,7 @@ fun ProfileScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "RAJAGIRI STUDENT IDENTITY",
+                                text = "RSETSPARKS STUDENT PROFILE",
                                 fontWeight = FontWeight.Black,
                                 fontSize = 12.sp,
                                 color = Color.White,
@@ -163,14 +210,14 @@ fun ProfileScreen(
                             Text(
                                 text = currentUser.email,
                                 fontSize = 12.sp,
-                                color = CrimsonPrimary,
+                                color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
 
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                text = "${currentUser.getEffectiveDepartment()} • '${currentUser.year.toString().takeLast(2)}",
+                                text = "${currentUser.department} • '${currentUser.year.toString().takeLast(2)}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -186,7 +233,7 @@ fun ProfileScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Institutional Email Verified",
+                                    text = if (currentUser.isVerified) "Rajagiri email verified" else "Verification under review",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = CampusVerifiedGreen
@@ -201,13 +248,13 @@ fun ProfileScreen(
                         text = "About Me",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = currentUser.getEffectiveBio(),
+                        text = currentUser.bio,
                         fontSize = 14.sp,
                         lineHeight = 20.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -219,7 +266,7 @@ fun ProfileScreen(
                         text = "Interests & Hobbies",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -301,7 +348,7 @@ fun ProfileScreen(
                     onCheckedChange = onToggleSparksVisibility,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
-                        checkedTrackColor = CrimsonPrimary
+                        checkedTrackColor = MaterialTheme.colorScheme.primary
                     ),
                     modifier = Modifier.testTag("sparks_visibility_switch")
                 )
@@ -395,7 +442,7 @@ fun ProfileScreen(
                     Icon(
                         imageVector = Icons.Default.Security,
                         contentDescription = null,
-                        tint = CrimsonPrimary,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -410,22 +457,22 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 SecurityBullet(
-                    title = "End-to-End Chat Encryption",
-                    description = "Student conversations are ciphered using client-side AES-GCM keys."
+                    title = "Private, Match-Only Chats",
+                    description = "Only students who matched can message each other. Data is encrypted in transit and at rest by Google Cloud."
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 SecurityBullet(
-                    title = "Strict @rajagiri.edu.in Guard",
-                    description = "External non-campus accounts, bots, and unverified personas are strictly blocked."
+                    title = "Verified @rajagiri.edu.in Students Only",
+                    description = "Every account must verify a Rajagiri email address. Everyone on RSETSparks is 18 or older."
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 SecurityBullet(
-                    title = "Audit-Logged Safety Investigation",
-                    description = "In harassment or emergency safety incidents, reported message transcripts are bundled into an authorized investigation docket with full officer accountability."
+                    title = "Report & Block Anytime",
+                    description = "Reported conversations are reviewed by campus moderators, and every moderator action is audit-logged."
                 )
             }
         }
@@ -451,6 +498,28 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
+        // Legal & support
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                ProfileLinkRow(Icons.Default.Policy, "Privacy Policy", Modifier.testTag("privacy_policy_link")) { openUrl(R.string.privacy_policy_url) }
+                ProfileLinkRow(Icons.Default.Description, "Terms of Use", Modifier.testTag("terms_link")) { openUrl(R.string.terms_url) }
+                ProfileLinkRow(Icons.Default.Email, "Contact Support", Modifier.testTag("support_link")) {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + context.getString(R.string.support_email)))
+                                .putExtra(Intent.EXTRA_SUBJECT, "RSETSparks support")
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Logout
         OutlinedButton(
             onClick = onLogout,
@@ -466,7 +535,44 @@ fun ProfileScreen(
             Text("Sign Out of RSETSparks")
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(
+            onClick = { showDeleteConfirm = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("delete_account_button")
+        ) {
+            Icon(imageVector = Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Delete Account", color = MaterialTheme.colorScheme.error)
+        }
+
+        Text(
+            text = "RSETSparks ${BuildConfig.VERSION_NAME}",
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ProfileLinkRow(icon: ImageVector, label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, modifier = Modifier.weight(1f), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
     }
 }
 

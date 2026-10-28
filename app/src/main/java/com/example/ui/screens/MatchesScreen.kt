@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,7 +60,7 @@ fun MatchesScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         item {
-            // Campus Encryption Banner
+            // Campus privacy banner
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -79,7 +79,7 @@ fun MatchesScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Lock,
+                            imageVector = Icons.Default.VerifiedUser,
                             contentDescription = null,
                             tint = CampusVerifiedGreen,
                             modifier = Modifier.size(20.dp)
@@ -90,13 +90,13 @@ fun MatchesScreen(
 
                     Column {
                         Text(
-                            text = "End-to-End Encrypted Chats",
+                            text = "Private Campus Chats",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "All student conversations are ciphered with device keys. Safe, verified, and campus-exclusive.",
+                            text = "Only matched students can message each other. Block or report anyone from the chat menu.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 15.sp
@@ -141,7 +141,7 @@ fun MatchesScreen(
                             Icon(
                                 imageVector = Icons.Default.Favorite,
                                 contentDescription = null,
-                                tint = CrimsonPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                         Spacer(modifier = Modifier.height(10.dp))
@@ -203,7 +203,7 @@ fun MatchesScreen(
                             )
 
                             Text(
-                                text = student.getEffectiveDepartment().take(8) + "..",
+                                text = student.department.take(8) + "..",
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -282,7 +282,7 @@ fun MatchesScreen(
                                 text = if (partner.isAdmin && partner.showBadges)
                                     "Campus Safety Directorate • Official Moderation"
                                 else
-                                    "${partner.getEffectiveDepartment()} • Active match",
+                                    "${partner.department} • Active match",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -293,14 +293,14 @@ fun MatchesScreen(
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Lock,
+                                    imageVector = Icons.Default.VerifiedUser,
                                     contentDescription = null,
                                     tint = CampusVerifiedGreen,
                                     modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Encrypted conversation ready",
+                                    text = "Tap to open chat",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = CampusVerifiedGreen

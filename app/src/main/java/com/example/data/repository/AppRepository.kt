@@ -1,573 +1,362 @@
 package com.example.data.repository
 
-import com.example.data.AppDatabase
+import android.net.Uri
+import android.util.Log
 import com.example.data.model.AuditLogEntity
-import com.example.data.model.ChatMessageEntity
+import com.example.data.model.ChatMessage
 import com.example.data.model.ReportEntity
-import com.example.data.model.SwipeMatchEntity
 import com.example.data.model.UserEntity
 import com.example.data.model.UserProfile
-import com.example.security.CryptoHelper
-import com.example.security.FirebaseAuthService
+import com.example.data.repository.FirestoreMappers.blockId
+import com.example.data.repository.FirestoreMappers.pairId
+import com.example.data.repository.FirestoreMappers.swipeId
 import com.google.firebase.Firebase
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.firestore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.storage
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-import java.util.UUID
+import kotlinx.coroutines.tasks.await
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-class AppRepository(private val db: AppDatabase) {
-
-    private val userDao = db.userDao()
-    private val userProfileDao = db.userProfileDao()
-    private val swipeDao = db.swipeDao()
-    private val chatDao = db.chatDao()
-    private val reportDao = db.reportDao()
-    private val auditDao = db.auditDao()
-
-    private val firestore: FirebaseFirestore get() = Firebase.firestore
-    private val activeChatListeners = mutableMapOf<String, ListenerRegistration>()
-
-    private val _currentUser = MutableStateFlow<UserEntity?>(null)
-    val currentUser = _currentUser.asStateFlow()
-
+/**
+ * All RSETSparks data lives in Cloud Firestore (with its built-in offline cache) and profile photos in
+ * Cloud Storage. Access control is enforced server-side by firestore.rules and storage.rules; the
+ * checks here only exist to give friendly errors.
+ */
+class AppRepository(
+    private val db: FirebaseFirestore = Firebase.firestore,
+    private val storage: FirebaseStorage = Firebase.storage
+) {
     companion object {
-        const val ADMIN_EMAIL = "u2504040@rajagiri.edu.in"
+        private const val TAG = "AppRepository"
+        private const val DISCOVERY_LIMIT = 200L
+        private const val TRANSCRIPT_MESSAGES = 30L
     }
 
-    private fun isTargetAdmin(email: String): Boolean {
-        return email.trim().equals(ADMIN_EMAIL, ignoreCase = true)
-    }
+    private val users get() = db.collection("users")
+    private val privateProfiles get() = db.collection("privateProfiles")
+    private val swipes get() = db.collection("swipes")
+    private val matches get() = db.collection("matches")
+    private val blocks get() = db.collection("blocks")
+    private val reports get() = db.collection("reports")
+    private val auditLogs get() = db.collection("auditLogs")
 
-    suspend fun initialize() {
-        // App starts unauthenticated; user signs in or registers with @rajagiri.edu.in email
-    }
+    // ---------------------------------------------------------------- profile
 
-    suspend fun loginWithEmail(email: String): Result<UserEntity> {
-        val cleanEmail = email.trim().lowercase()
-        if (!isValidRajagiriEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Access restricted: Email must end with @rajagiri.edu.in"))
-        }
+    suspend fun isAdmin(uid: String): Boolean =
+        runCatching { db.collection("admins").document(uid).get().await().exists() }.getOrDefault(false)
 
-        val user = userDao.getUserByEmail(cleanEmail)
-        return if (user != null) {
-            if (user.isSuspended) {
-                Result.failure(IllegalStateException("This account has been suspended by Campus Safety."))
-            } else {
-                val shouldBeAdmin = isTargetAdmin(cleanEmail)
-                val expectedAdminName = if (shouldBeAdmin && (user.name == "Officer Thomas Kurian" || user.name.isBlank())) "Mohammed Mishal M" else user.name
-                val syncedUser = if (user.isAdmin != shouldBeAdmin || (shouldBeAdmin && user.name != expectedAdminName)) {
-                    val updated = user.copy(
-                        name = expectedAdminName,
-                        isAdmin = shouldBeAdmin,
-                        avatarEmoji = if (shouldBeAdmin && user.showBadges) "🛡️" else "🎓"
-                    )
-                    userDao.updateUser(updated)
-                    updated
-                } else {
-                    user
-                }
-                _currentUser.value = syncedUser
-                Result.success(syncedUser)
+    /** Streams the signed-in user's own profile; emits null until onboarding has created it. */
+    fun observeOwnProfile(uid: String, email: String, isAdmin: Boolean): Flow<UserEntity?> = callbackFlow {
+        val reg = users.document(uid).addSnapshotListener { snap, error ->
+            if (error != null) {
+                Log.w(TAG, "Profile listener failed", error)
+                close(error)
+                return@addSnapshotListener
             }
-        } else {
-            Result.failure(IllegalArgumentException("No account registered with this email. Please register your student profile first."))
+            if (snap == null) return@addSnapshotListener
+            // Offline, the local cache can't tell "no profile yet" from "not downloaded yet"; wait for the server.
+            if (!snap.exists() && snap.metadata.isFromCache) return@addSnapshotListener
+            val data = snap.data
+            trySend(if (snap.exists() && data != null) FirestoreMappers.userFromMap(uid, data, email, isAdmin) else null)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun createProfile(uid: String, email: String, profile: UserProfile, isAdmin: Boolean): Result<Unit> = runCatching {
+        val photoUrl = profile.localPhotoUri?.let { uploadProfilePhoto(uid, Uri.parse(it)) }
+        val data = FirestoreMappers.userToMap(
+            id = uid,
+            profile = profile,
+            photoUrl = photoUrl,
+            colorIndex = (0..6).random(),
+            visible = !isAdmin // Moderators start hidden from the discovery deck
+        ) + mapOf("createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp())
+        privateProfiles.document(uid).set(mapOf("email" to email, "createdAt" to FieldValue.serverTimestamp())).await()
+        users.document(uid).set(data).await()
+        Unit
+    }
+
+    private suspend fun uploadProfilePhoto(uid: String, localUri: Uri): String {
+        val ref = storage.reference.child("profilePhotos/$uid/avatar.jpg")
+        ref.putFile(localUri, com.google.firebase.storage.StorageMetadata.Builder().setContentType("image/jpeg").build()).await()
+        return ref.downloadUrl.await().toString()
+    }
+
+    suspend fun updateVisibility(uid: String, visible: Boolean) {
+        users.document(uid).update(mapOf("visible" to visible, "updatedAt" to FieldValue.serverTimestamp())).await()
+    }
+
+    suspend fun updateShowBadges(uid: String, showBadges: Boolean) {
+        users.document(uid).update(mapOf("showBadges" to showBadges, "updatedAt" to FieldValue.serverTimestamp())).await()
+    }
+
+    // ---------------------------------------------------------------- discovery & swipes
+
+    /**
+     * Visible, non-suspended students the user hasn't swiped on or blocked (in either direction).
+     * Campus-scale: the whole visible roster fits in one query.
+     */
+    fun discoveryCandidates(uid: String): Flow<List<UserEntity>> {
+        val roster = users.whereEqualTo("visible", true).whereEqualTo("suspended", false)
+            .limit(DISCOVERY_LIMIT).snapshots { id, data -> FirestoreMappers.userFromMap(id, data) }
+        val swiped = swipes.whereEqualTo("from", uid).snapshots { _, data -> data["to"] as? String }
+        return combine(roster, swiped, blockedUserIds(uid)) { people, swipedIds, blockedIds ->
+            val hidden = swipedIds.filterNotNull().toSet() + blockedIds
+            people.filter { it.id != uid && it.id !in hidden }
         }
     }
 
-    suspend fun loginOrRegisterGoogleUser(email: String, displayName: String?): Result<UserEntity> {
-        val cleanEmail = email.trim().lowercase()
-        if (!isValidRajagiriEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Access restricted: Email must end with @rajagiri.edu.in"))
-        }
+    /** Records a swipe; for likes, creates the match when the other student already liked back. */
+    suspend fun recordSwipe(uid: String, targetId: String, action: String): Boolean {
+        swipes.document(swipeId(uid, targetId)).set(
+            mapOf("from" to uid, "to" to targetId, "action" to action, "createdAt" to FieldValue.serverTimestamp())
+        ).await()
+        if (action != "LIKE" && action != "SUPER_SPARK") return false
 
-        val existing = userDao.getUserByEmail(cleanEmail)
-        if (existing != null) {
-            if (existing.isSuspended) {
-                return Result.failure(IllegalStateException("This account has been suspended by Campus Safety."))
-            }
-            val shouldBeAdmin = isTargetAdmin(cleanEmail)
-            val expectedAdminName = if (shouldBeAdmin && (existing.name == "Officer Thomas Kurian" || existing.name.isBlank())) "Mohammed Mishal M" else existing.name
-            val syncedUser = if (existing.isAdmin != shouldBeAdmin || (shouldBeAdmin && existing.name != expectedAdminName)) {
-                val updated = existing.copy(
-                    name = expectedAdminName,
-                    isAdmin = shouldBeAdmin,
-                    avatarEmoji = if (shouldBeAdmin && existing.showBadges) "🛡️" else "🎓"
+        val theirs = runCatching { swipes.document(swipeId(targetId, uid)).get().await() }.getOrNull()
+        val likedBack = theirs?.getString("action").let { it == "LIKE" || it == "SUPER_SPARK" }
+        if (!likedBack) return false
+
+        val match = matches.document(pairId(uid, targetId))
+        val created = runCatching {
+            match.set(
+                mapOf(
+                    "users" to listOf(uid, targetId).sorted(),
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "lastMessageAt" to FieldValue.serverTimestamp()
                 )
-                userDao.updateUser(updated)
-                updated
-            } else {
-                existing
-            }
-            _currentUser.value = syncedUser
-            return Result.success(syncedUser)
+            ).await()
         }
-
-        val isOfficer = isTargetAdmin(cleanEmail)
-        val name = if (isOfficer) "Mohammed Mishal M" else (displayName?.ifBlank { null } ?: cleanEmail.substringBefore("@").replace(".", " ").capitalizeWords())
-        val newStudent = UserEntity(
-            id = UUID.randomUUID().toString(),
-            email = cleanEmail,
-            name = name,
-            age = 21,
-            department = if (isOfficer) "Campus Safety Directorate" else "B.Tech Computer Science",
-            year = 2026,
-            bio = if (isOfficer) "Official Rajagiri Campus Moderation and Student Welfare Coordinator." else "Verified Rajagiri student. Excited to meet fellow campus peers!",
-            interests = if (isOfficer) "Campus Safety, Ethics, Student Affairs" else "Campus Life, Tech, Music",
-            avatarColorIndex = if (isOfficer) 8 else (0..6).random(),
-            avatarEmoji = "🎓",
-            isVerified = true,
-            isAdmin = isOfficer,
-            isVisibleInSparks = !isOfficer,
-            showBadges = false
-        )
-        userDao.insertUser(newStudent)
-        _currentUser.value = newStudent
-        return Result.success(newStudent)
+        // If both students liked at the same moment the other device may have created it first.
+        return created.isSuccess || runCatching { match.get().await().exists() }.getOrDefault(false)
     }
 
-    suspend fun registerStudent(
-        email: String,
-        name: String,
-        age: Int,
-        department: String,
-        year: Int,
-        bio: String,
-        interests: String,
-        avatarEmoji: String
-    ): Result<UserEntity> {
-        val cleanEmail = email.trim().lowercase()
-        if (!isValidRajagiriEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Registration failed: Only @rajagiri.edu.in domains are permitted."))
-        }
-
-        val existing = userDao.getUserByEmail(cleanEmail)
-        if (existing != null) {
-            val shouldBeAdmin = isTargetAdmin(cleanEmail)
-            val expectedAdminName = if (shouldBeAdmin && (existing.name == "Officer Thomas Kurian" || existing.name.isBlank())) "Mohammed Mishal M" else existing.name
-            val syncedUser = if (existing.isAdmin != shouldBeAdmin || (shouldBeAdmin && existing.name != expectedAdminName)) {
-                val updated = existing.copy(
-                    name = expectedAdminName,
-                    isAdmin = shouldBeAdmin,
-                    avatarEmoji = if (shouldBeAdmin && existing.showBadges) "🛡️" else "🎓"
-                )
-                userDao.updateUser(updated)
-                updated
-            } else {
-                existing
-            }
-            _currentUser.value = syncedUser
-            return Result.success(syncedUser)
-        }
-
-        val isOfficer = isTargetAdmin(cleanEmail)
-        val studentName = if (isOfficer) "Mohammed Mishal M" else name.ifBlank { "Rajagiri Student" }
-        val newStudent = UserEntity(
-            id = UUID.randomUUID().toString(),
-            email = cleanEmail,
-            name = studentName,
-            age = if (age in 17..35) age else 21,
-            department = department.ifBlank { "B.Tech Computer Science" },
-            year = if (year in 2020..2030) year else 2026,
-            bio = bio.ifBlank { "Excited to meet fellow Rajagiri students! 👋" },
-            interests = interests.ifBlank { "Campus Life, Music, Coffee" },
-            avatarColorIndex = if (isOfficer) 8 else (0..6).random(),
-            avatarEmoji = avatarEmoji.ifBlank { "🎓" },
-            isVerified = true,
-            isAdmin = isOfficer,
-            isVisibleInSparks = !isOfficer,
-            showBadges = false
-        )
-        userDao.insertUser(newStudent)
-
-        // Also cache UserProfile
-        val profile = UserProfile(
-            id = newStudent.id,
-            email = cleanEmail,
-            name = newStudent.name,
-            bio = bio,
-            interests = if (interests.isNotBlank()) interests.split(",").map { it.trim() } else emptyList(),
-            department = department,
-            year = year,
-            age = age,
-            isVerified = true
-        )
-        userProfileDao.insertProfile(profile)
-
-        _currentUser.value = newStudent
-        return Result.success(newStudent)
-    }
-
-    suspend fun registerStudentWithProfile(profile: UserProfile): Result<UserEntity> {
-        val cleanEmail = profile.email.trim().lowercase()
-        if (!isValidRajagiriEmail(cleanEmail)) {
-            return Result.failure(IllegalArgumentException("Registration failed: Only @rajagiri.edu.in accounts are permitted."))
-        }
-
-        // Cache UserProfile locally in Room
-        userProfileDao.insertProfile(profile)
-
-        // Sync with Firestore
-        try {
-            FirebaseAuthService.getInstance(userProfileDao, userDao).saveAndSyncUserProfile(profile)
-        } catch (_: Exception) {}
-
-        // Insert or update UserEntity for app matching and messaging
-        val userEntity = profile.toUserEntity()
-        userDao.insertUser(userEntity)
-        _currentUser.value = userEntity
-
-        return Result.success(userEntity)
-    }
-
-    suspend fun getUserProfile(userId: String): UserProfile? {
-        return userProfileDao.getProfileById(userId)
-    }
-
-    fun getUserProfileFlow(userId: String): Flow<UserProfile?> {
-        return userProfileDao.getProfileFlow(userId)
-    }
-
-    suspend fun syncAllPendingProfiles() {
-        FirebaseAuthService.getInstance(userProfileDao, userDao).syncPendingProfiles()
-    }
-
-    fun logout() {
-        _currentUser.value = null
-    }
-
-    fun isValidRajagiriEmail(email: String): Boolean {
-        val trimmed = email.trim().lowercase()
-        return trimmed.endsWith("@rajagiri.edu.in") && trimmed.length > "@rajagiri.edu.in".length
-    }
-
-    suspend fun updateSparksVisibility(userId: String, isVisible: Boolean) {
-        userDao.setSparksVisibility(userId, isVisible)
-        val updated = userDao.getUserById(userId)
-        if (_currentUser.value?.id == userId) {
-            _currentUser.value = updated
+    /** Brings back everyone the user passed on. Likes are kept so pending matches still work. */
+    suspend fun resetPasses(uid: String) {
+        val passes = swipes.whereEqualTo("from", uid).whereEqualTo("action", "PASS").get().await()
+        passes.documents.chunked(400).forEach { chunk ->
+            db.runBatch { batch -> chunk.forEach { batch.delete(it.reference) } }.await()
         }
     }
 
-    suspend fun updateAdminBadgeVisibility(userId: String, showBadges: Boolean) {
-        userDao.setShowBadges(userId, showBadges)
-        val updated = userDao.getUserById(userId)
-        if (updated != null && _currentUser.value?.id == userId) {
-            _currentUser.value = updated
-        }
-        try {
-            val profile = userProfileDao.getProfileById(userId)
-            if (profile != null) {
-                val updatedProfile = profile.copy(showBadges = showBadges)
-                userProfileDao.updateProfile(updatedProfile)
-                FirebaseAuthService.getInstance(userProfileDao, userDao).saveAndSyncUserProfile(updatedProfile)
-            }
-        } catch (_: Exception) {}
+    // ---------------------------------------------------------------- matches & chat
+
+    fun matchedUsers(uid: String): Flow<List<UserEntity>> {
+        val partnerIds = matches.whereArrayContains("users", uid)
+            .orderBy("lastMessageAt", Query.Direction.DESCENDING)
+            .snapshots { _, data -> (data["users"] as? List<*>)?.firstOrNull { it != uid } as? String }
+        return combine(partnerIds, blockedUserIds(uid)) { ids, blocked -> ids.filterNotNull().filter { it !in blocked } }
+            .map { ids -> ids.mapNotNull { fetchUser(it) }.filter { !it.isSuspended } }
     }
 
-    // Discovery Deck flow
-    fun getDiscoveryCandidatesFlow(currentUserId: String): Flow<List<UserEntity>> {
-        return db.userDao().getAllActiveUsersFlow().map { allUsers ->
-            val swipedIds = swipeDao.getSwipedUserIds(currentUserId).toSet()
-            allUsers.filter { it.id != currentUserId && !it.isAdmin && !it.isSuspended && !swipedIds.contains(it.id) }
-        }
-    }
+    private suspend fun fetchUser(id: String): UserEntity? = runCatching {
+        val snap = users.document(id).get().await()
+        snap.data?.let { FirestoreMappers.userFromMap(id, it) }
+    }.getOrNull()
 
-    suspend fun resetDiscoveryDeck(userId: String) {
-        swipeDao.deleteSwipesForUser(userId)
-    }
-
-    suspend fun recordSwipe(
-        fromUserId: String,
-        targetUserId: String,
-        action: String // "LIKE", "PASS", "SUPER_SPARK"
-    ): Boolean {
-        var isMutual = false
-        if (action == "LIKE" || action == "SUPER_SPARK") {
-            val existingOtherSwipe = swipeDao.getSwipe(targetUserId, fromUserId)
-            if (existingOtherSwipe?.action == "LIKE" || existingOtherSwipe?.action == "SUPER_SPARK") {
-                isMutual = true
-                swipeDao.updateSwipe(existingOtherSwipe.copy(isMutualMatch = true))
-            }
-        }
-
-        val swipe = SwipeMatchEntity(
-            id = UUID.randomUUID().toString(),
-            fromUserId = fromUserId,
-            toUserId = targetUserId,
-            action = action,
-            isMutualMatch = isMutual
-        )
-        swipeDao.insertSwipe(swipe)
-        return isMutual
-    }
-
-    fun getMutualMatchesUsersFlow(currentUserId: String): Flow<List<UserEntity>> {
-        return swipeDao.getMutualMatchesFlow(currentUserId).map { matches ->
-            val otherUserIds = matches.map { if (it.fromUserId == currentUserId) it.toUserId else it.fromUserId }.distinct()
-            otherUserIds.mapNotNull { userDao.getUserById(it) }
-        }
-    }
-
-    // Encrypted Chat flow with Cloud Firestore Real-time synchronization
-    fun getConversationMessagesFlow(conversationId: String): Flow<List<ChatMessageEntity>> {
-        return chatDao.getMessagesForConversationFlow(conversationId)
-    }
-
-    fun attachRealtimeChatListener(conversationId: String, coroutineScope: CoroutineScope) {
-        if (activeChatListeners.containsKey(conversationId)) return
-
-        try {
-            val registration = firestore.collection("chats")
-                .document(conversationId)
-                .collection("messages")
-                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.ASCENDING)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        android.util.Log.w("AppRepository", "Firestore chat listener error: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null && !snapshot.isEmpty) {
-                        val incoming = snapshot.documents.mapNotNull { doc ->
-                            try {
-                                ChatMessageEntity(
-                                    id = doc.getString("id") ?: doc.id,
-                                    conversationId = doc.getString("conversationId") ?: conversationId,
-                                    senderId = doc.getString("senderId") ?: "",
-                                    receiverId = doc.getString("receiverId") ?: "",
-                                    encryptedContent = doc.getString("encryptedContent") ?: "",
-                                    iv = doc.getString("iv") ?: "",
-                                    plainSnippet = doc.getString("plainSnippet") ?: "",
-                                    timestamp = doc.getLong("timestamp") ?: System.currentTimeMillis(),
-                                    isRead = doc.getBoolean("isRead") ?: false
-                                )
-                            } catch (e: Exception) {
-                                null
-                            }
-                        }
-                        if (incoming.isNotEmpty()) {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                chatDao.insertMessages(incoming)
-                            }
-                        }
-                    }
+    fun messages(uid: String, partnerId: String): Flow<List<ChatMessage>> = callbackFlow {
+        val reg = matches.document(pairId(uid, partnerId)).collection("messages")
+            .orderBy("createdAt", Query.Direction.ASCENDING)
+            .limitToLast(500)
+            .addSnapshotListener { snap, error ->
+                if (error != null) {
+                    // Most likely the match was removed (unmatch/block); show an empty conversation.
+                    Log.w(TAG, "Chat listener stopped", error)
+                    trySend(emptyList())
+                    return@addSnapshotListener
                 }
-            activeChatListeners[conversationId] = registration
-        } catch (e: Exception) {
-            android.util.Log.w("AppRepository", "Failed attaching Firestore listener: ${e.message}")
-        }
+                trySend(snap?.documents.orEmpty().map {
+                    FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), it.metadata.hasPendingWrites())
+                })
+            }
+        awaitClose { reg.remove() }
     }
 
-    fun detachRealtimeChatListener(conversationId: String) {
-        activeChatListeners.remove(conversationId)?.remove()
-    }
-
-    suspend fun sendMessage(
-        senderId: String,
-        receiverId: String,
-        plainText: String
-    ): ChatMessageEntity {
-        val convId = CryptoHelper.buildConversationId(senderId, receiverId)
-        val encryption = CryptoHelper.encrypt(plainText, convId)
-
-        val message = ChatMessageEntity(
-            id = UUID.randomUUID().toString(),
-            conversationId = convId,
-            senderId = senderId,
-            receiverId = receiverId,
-            encryptedContent = encryption.cipherTextBase64,
-            iv = encryption.ivBase64,
-            plainSnippet = plainText,
-            timestamp = System.currentTimeMillis(),
-            isRead = false
-        )
-        // 1. Immediately cache in Room database
-        chatDao.insertMessage(message)
-
-        // 2. Publish to Cloud Firestore real-time collection for instant partner sync
-        try {
-            val firestoreMap = mapOf(
-                "id" to message.id,
-                "conversationId" to message.conversationId,
-                "senderId" to message.senderId,
-                "receiverId" to message.receiverId,
-                "encryptedContent" to message.encryptedContent,
-                "iv" to message.iv,
-                "plainSnippet" to message.plainSnippet,
-                "timestamp" to message.timestamp,
-                "isRead" to message.isRead
+    suspend fun sendMessage(uid: String, partnerId: String, text: String) {
+        val match = matches.document(pairId(uid, partnerId))
+        val trimmed = text.trim().take(2000)
+        db.runBatch { batch ->
+            batch.set(
+                match.collection("messages").document(),
+                mapOf("senderId" to uid, "text" to trimmed, "createdAt" to FieldValue.serverTimestamp())
             )
-            firestore.collection("chats")
-                .document(convId)
-                .collection("messages")
-                .document(message.id)
-                .set(firestoreMap)
-        } catch (e: Exception) {
-            android.util.Log.w("AppRepository", "Error syncing message to Firestore: ${e.message}")
-        }
-
-        return message
+            batch.update(
+                match,
+                mapOf("lastMessage" to trimmed.take(120), "lastMessageAt" to FieldValue.serverTimestamp(), "lastSenderId" to uid)
+            )
+        }.await()
     }
 
-    // Report Safety Incident flow with encrypted transcript package
-    suspend fun reportAccount(
-        reporterId: String,
-        reportedUserId: String,
-        reasonCategory: String,
+    suspend fun unmatch(uid: String, partnerId: String) {
+        matches.document(pairId(uid, partnerId)).delete().await()
+    }
+
+    // ---------------------------------------------------------------- safety
+
+    private fun blockedUserIds(uid: String): Flow<Set<String>> {
+        val mine = blocks.whereEqualTo("blocker", uid).snapshots { _, data -> data["blocked"] as? String }
+        val theirs = blocks.whereEqualTo("blocked", uid).snapshots { _, data -> data["blocker"] as? String }
+        return combine(mine, theirs) { a, b -> (a + b).filterNotNull().toSet() }
+    }
+
+    /** Blocks a student: hides them both ways and ends any match. */
+    suspend fun blockUser(uid: String, targetId: String) {
+        blocks.document(blockId(uid, targetId)).set(
+            mapOf("blocker" to uid, "blocked" to targetId, "createdAt" to FieldValue.serverTimestamp())
+        ).await()
+        runCatching { unmatch(uid, targetId) }
+    }
+
+    suspend fun reportUser(
+        reporter: UserEntity,
+        target: UserEntity,
+        reason: String,
         description: String
-    ): Result<ReportEntity> {
-        val reporter = userDao.getUserById(reporterId) ?: return Result.failure(Exception("Reporter not found"))
-        val reported = userDao.getUserById(reportedUserId) ?: return Result.failure(Exception("Reported user not found"))
+    ): Result<Unit> = runCatching {
+        reports.add(
+            mapOf(
+                "reporterId" to reporter.id,
+                "reporterEmail" to reporter.email,
+                "reportedUserId" to target.id,
+                "reportedUserName" to target.name,
+                "reason" to reason,
+                "description" to description.trim().take(1000),
+                "transcript" to buildTranscript(reporter, target),
+                "status" to "PENDING",
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+        Unit
+    }
 
-        val convId = CryptoHelper.buildConversationId(reporterId, reportedUserId)
-        val messages = chatDao.getMessagesForConversation(convId)
+    private suspend fun buildTranscript(reporter: UserEntity, target: UserEntity): String {
+        val recent = runCatching {
+            matches.document(pairId(reporter.id, target.id)).collection("messages")
+                .orderBy("createdAt", Query.Direction.DESCENDING).limit(TRANSCRIPT_MESSAGES).get().await()
+                .documents.map { FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false) }.reversed()
+        }.getOrDefault(emptyList())
+        if (recent.isEmpty()) return "[No chat history between these students. Profile content reported.]"
+        val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
+        return recent.joinToString("\n") { msg ->
+            val who = if (msg.senderId == reporter.id) reporter.name else target.name
+            "[${fmt.format(Date(msg.timestamp))}] $who: ${msg.text}"
+        }
+    }
 
-        // Build audit transcript snapshot
-        val transcriptBuilder = StringBuilder()
-        if (messages.isEmpty()) {
-            transcriptBuilder.append("[No chat history recorded between these users. Profile content reported.]")
+    /**
+     * Removes the student's data (photo, swipes, blocks, matches, own messages, profile).
+     * The Firebase Auth account itself is deleted afterwards by the caller via AuthService.
+     */
+    suspend fun deleteAllUserData(uid: String) {
+        runCatching { storage.reference.child("profilePhotos/$uid/avatar.jpg").delete().await() }
+
+        val myMatches = matches.whereArrayContains("users", uid).get().await().documents
+        for (match in myMatches) {
+            val mine = match.reference.collection("messages").whereEqualTo("senderId", uid).get().await().documents
+            mine.chunked(400).forEach { chunk -> db.runBatch { b -> chunk.forEach { b.delete(it.reference) } }.await() }
+            match.reference.delete().await()
+        }
+        val refs = swipes.whereEqualTo("from", uid).get().await().documents.map { it.reference } +
+            blocks.whereEqualTo("blocker", uid).get().await().documents.map { it.reference }
+        refs.chunked(400).forEach { chunk -> db.runBatch { b -> chunk.forEach { b.delete(it) } }.await() }
+
+        privateProfiles.document(uid).delete().await()
+        users.document(uid).delete().await()
+    }
+
+    // ---------------------------------------------------------------- admin
+
+    fun allReports(): Flow<List<ReportEntity>> =
+        reports.orderBy("createdAt", Query.Direction.DESCENDING).limit(500)
+            .snapshots { id, data -> FirestoreMappers.reportFromMap(id, data) }
+
+    fun allUsersWithEmails(): Flow<List<UserEntity>> {
+        val people = users.snapshots { id, data -> FirestoreMappers.userFromMap(id, data) }
+        val emails = privateProfiles.snapshots { id, data -> id to (data["email"] as? String ?: "") }
+        return combine(people, emails) { list, emailPairs ->
+            val byId = emailPairs.toMap()
+            list.map { it.copy(email = byId[it.id] ?: "") }.sortedBy { it.name.lowercase() }
+        }
+    }
+
+    fun auditTrail(): Flow<List<AuditLogEntity>> =
+        auditLogs.orderBy("createdAt", Query.Direction.DESCENDING).limit(500)
+            .snapshots { id, data -> FirestoreMappers.auditLogFromMap(id, data) }
+
+    private suspend fun audit(admin: UserEntity, action: String, targetId: String, targetEmail: String, reason: String) {
+        auditLogs.add(
+            mapOf(
+                "adminUid" to admin.id,
+                "adminEmail" to admin.email,
+                "action" to action,
+                "targetUserId" to targetId,
+                "targetUserEmail" to targetEmail,
+                "reason" to reason,
+                "createdAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+    }
+
+    suspend fun adminResolveReport(admin: UserEntity, report: ReportEntity, status: String, note: String, suspend: Boolean) {
+        reports.document(report.id).update(
+            mapOf("status" to status, "adminNote" to note, "resolvedAt" to FieldValue.serverTimestamp(), "resolvedBy" to admin.id)
+        ).await()
+        if (suspend) {
+            setSuspended(report.reportedUserId, true)
+            audit(admin, "SUSPENDED_USER", report.reportedUserId, report.reportedEmail, "Incident ${report.id}: $note")
         } else {
-            messages.takeLast(15).forEach { msg ->
-                val senderLabel = if (msg.senderId == reporterId) reporter.email else reported.email
-                val timeStr = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(msg.timestamp)
-                transcriptBuilder.append("[$timeStr] $senderLabel: ${msg.plainSnippet}\n")
+            audit(admin, "RESOLVED_INCIDENT", report.reportedUserId, report.reportedEmail, "Status $status: $note")
+        }
+    }
+
+    private suspend fun setSuspended(uid: String, suspended: Boolean) {
+        users.document(uid).update(mapOf("suspended" to suspended, "updatedAt" to FieldValue.serverTimestamp())).await()
+    }
+
+    suspend fun adminToggleSuspension(admin: UserEntity, target: UserEntity, suspended: Boolean, reason: String) {
+        setSuspended(target.id, suspended)
+        audit(admin, if (suspended) "SUSPENDED_USER" else "REINSTATED_USER", target.id, target.email, reason)
+    }
+
+    suspend fun adminToggleVerification(admin: UserEntity, target: UserEntity, verified: Boolean) {
+        users.document(target.id).update(mapOf("verified" to verified, "updatedAt" to FieldValue.serverTimestamp())).await()
+        audit(admin, if (verified) "VERIFIED_STUDENT" else "REVOKED_VERIFICATION", target.id, target.email, "Manual verification change")
+    }
+
+    /** Reads every conversation of a student for an emergency investigation; always audit-logged first. */
+    suspend fun adminEmergencyAudit(admin: UserEntity, target: UserEntity, justification: String): List<String> {
+        audit(admin, "EMERGENCY_CHAT_AUDIT_ACCESSED", target.id, target.email, "Justification: $justification")
+        val fmt = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
+        return matches.whereArrayContains("users", target.id).get().await().documents.flatMap { match ->
+            match.reference.collection("messages").orderBy("createdAt").get().await().documents.map {
+                val msg = FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false)
+                val who = if (msg.senderId == target.id) target.name else "match ${match.id.replace(target.id, "").trim('_').take(6)}"
+                "[${fmt.format(Date(msg.timestamp))}] $who: ${msg.text}"
             }
         }
-
-        val report = ReportEntity(
-            id = UUID.randomUUID().toString(),
-            reporterId = reporterId,
-            reportedUserId = reportedUserId,
-            reporterEmail = reporter.email,
-            reportedEmail = reported.email,
-            reportedUserName = reported.name,
-            reasonCategory = reasonCategory,
-            description = description,
-            status = "PENDING",
-            chatTranscriptSnapshot = transcriptBuilder.toString(),
-            createdAt = System.currentTimeMillis()
-        )
-
-        reportDao.insertReport(report)
-        userDao.incrementWarning(reportedUserId)
-
-        // Add audit trail entry
-        auditDao.insertAuditLog(
-            AuditLogEntity(
-                id = UUID.randomUUID().toString(),
-                adminEmail = "SYSTEM_AUTOMATION",
-                action = "INCIDENT_REPORT_SUBMITTED",
-                targetUserId = reportedUserId,
-                targetUserEmail = reported.email,
-                reason = "Report category: $reasonCategory by ${reporter.email}"
-            )
-        )
-
-        return Result.success(report)
     }
 
-    // Admin Moderation flows
-    fun getAllReportsFlow(): Flow<List<ReportEntity>> = reportDao.getAllReportsFlow()
+    // ---------------------------------------------------------------- helpers
 
-    fun getAllUsersForAdminFlow(): Flow<List<UserEntity>> = userDao.getAllUsersForAdminFlow()
-
-    fun getAllAuditLogsFlow(): Flow<List<AuditLogEntity>> = auditDao.getAllAuditLogsFlow()
-
-    fun getPendingReportsCountFlow(): Flow<Int> = reportDao.getPendingReportsCountFlow()
-
-    suspend fun adminResolveReport(
-        reportId: String,
-        newStatus: String,
-        adminNote: String,
-        adminEmail: String,
-        suspendUser: Boolean = false
-    ) {
-        val report = reportDao.getReportById(reportId) ?: return
-        reportDao.updateReportStatus(reportId, newStatus, adminNote)
-
-        if (suspendUser) {
-            userDao.setSuspension(report.reportedUserId, true)
-            auditDao.insertAuditLog(
-                AuditLogEntity(
-                    id = UUID.randomUUID().toString(),
-                    adminEmail = adminEmail,
-                    action = "SUSPENDED_USER",
-                    targetUserId = report.reportedUserId,
-                    targetUserEmail = report.reportedEmail,
-                    reason = "Action taken on incident #$reportId: $adminNote"
-                )
-            )
-        } else {
-            auditDao.insertAuditLog(
-                AuditLogEntity(
-                    id = UUID.randomUUID().toString(),
-                    adminEmail = adminEmail,
-                    action = "RESOLVED_INCIDENT",
-                    targetUserId = report.reportedUserId,
-                    targetUserEmail = report.reportedEmail,
-                    reason = "Status updated to $newStatus: $adminNote"
-                )
-            )
+    private fun <T> Query.snapshots(mapper: (String, Map<String, Any?>) -> T): Flow<List<T>> = callbackFlow {
+        val reg = addSnapshotListener { snap, error ->
+            if (error != null) {
+                Log.w(TAG, "Query listener failed", error)
+                trySend(emptyList())
+                return@addSnapshotListener
+            }
+            trySend(snap?.documents.orEmpty().map { mapper(it.id, it.data.orEmpty()) })
         }
-    }
-
-    suspend fun adminToggleSuspension(userId: String, isSuspended: Boolean, adminEmail: String, reason: String) {
-        val user = userDao.getUserById(userId) ?: return
-        userDao.setSuspension(userId, isSuspended)
-        auditDao.insertAuditLog(
-            AuditLogEntity(
-                id = UUID.randomUUID().toString(),
-                adminEmail = adminEmail,
-                action = if (isSuspended) "SUSPENDED_USER" else "REINSTATED_USER",
-                targetUserId = userId,
-                targetUserEmail = user.email,
-                reason = reason
-            )
-        )
-    }
-
-    suspend fun adminToggleVerification(userId: String, isVerified: Boolean, adminEmail: String) {
-        val user = userDao.getUserById(userId) ?: return
-        userDao.setVerification(userId, isVerified)
-        auditDao.insertAuditLog(
-            AuditLogEntity(
-                id = UUID.randomUUID().toString(),
-                adminEmail = adminEmail,
-                action = if (isVerified) "VERIFIED_STUDENT" else "REVOKED_VERIFICATION",
-                targetUserId = userId,
-                targetUserEmail = user.email,
-                reason = "Manual verification toggle by campus safety officer"
-            )
-        )
-    }
-
-    suspend fun adminEmergencyAuditTranscripts(userId: String, adminEmail: String, justification: String): List<String> {
-        val user = userDao.getUserById(userId) ?: return emptyList()
-        val allMessages = chatDao.getAllMessagesForUserFlow(userId).first()
-        auditDao.insertAuditLog(
-            AuditLogEntity(
-                id = UUID.randomUUID().toString(),
-                adminEmail = adminEmail,
-                action = "EMERGENCY_CHAT_AUDIT_ACCESSED",
-                targetUserId = userId,
-                targetUserEmail = user.email,
-                reason = "Justification: $justification"
-            )
-        )
-        return allMessages.map { msg ->
-            val time = java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.getDefault()).format(msg.timestamp)
-            "[$time] (${msg.senderId}): ${msg.plainSnippet}"
-        }
-    }
-
-    private fun String.capitalizeWords(): String {
-        return split(" ").joinToString(" ") { it.replaceFirstChar { char -> char.uppercase() } }
+        awaitClose { reg.remove() }
     }
 }

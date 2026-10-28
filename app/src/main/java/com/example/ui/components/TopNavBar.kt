@@ -88,7 +88,7 @@ fun CampusTopHeader(
                             text = "RSET",
                             fontWeight = FontWeight.Black,
                             fontSize = 18.sp,
-                            color = CrimsonPrimary
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(
                             text = "Sparks",

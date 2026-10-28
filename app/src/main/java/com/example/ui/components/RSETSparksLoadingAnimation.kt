@@ -284,7 +284,7 @@ fun RSETSparksLoadingAnimation(
                     fontWeight = FontWeight.Black,
                     fontSize = 26.sp,
                     letterSpacing = 1.sp,
-                    color = CrimsonPrimary
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(

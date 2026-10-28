@@ -74,7 +74,7 @@ fun RSETSparksBottomNav(
                 selectedIcon = Icons.Filled.LocalFireDepartment,
                 unselectedIcon = Icons.Outlined.LocalFireDepartment,
                 isSelected = currentScreen is Screen.DISCOVERY,
-                selectedColor = CrimsonPrimary,
+                selectedColor = MaterialTheme.colorScheme.primary,
                 testTag = "nav_discovery_tab",
                 onClick = { onNavigate(Screen.DISCOVERY) }
             )
@@ -107,7 +107,7 @@ fun RSETSparksBottomNav(
                 selectedIcon = Icons.Filled.Person,
                 unselectedIcon = Icons.Outlined.PersonOutline,
                 isSelected = currentScreen is Screen.PROFILE,
-                selectedColor = CrimsonPrimary,
+                selectedColor = MaterialTheme.colorScheme.primary,
                 testTag = "nav_profile_tab",
                 onClick = { onNavigate(Screen.PROFILE) }
             )

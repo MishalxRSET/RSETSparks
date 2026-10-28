@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.RSETSparks.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/brand_wine_night</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.RSETSparks</item>
+    </style>
+
+    <style name="Theme.RSETSparks" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/brand_wine_night</item>
+        <item name="android:colorPrimary">@color/brand_rose</item>
+        <item name="android:colorAccent">@color/brand_spark</item>
+    </style>
+</resources>

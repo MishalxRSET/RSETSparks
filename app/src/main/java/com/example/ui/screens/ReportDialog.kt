@@ -54,7 +54,7 @@ import com.example.ui.theme.CrimsonPrimary
 @Composable
 fun ReportDialog(
     targetUser: UserEntity,
-    onSubmitReport: (String, String) -> Unit,
+    onSubmitReport: (reason: String, details: String, alsoBlock: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val reportCategories = listOf(
@@ -67,6 +67,7 @@ fun ReportDialog(
 
     var selectedCategory by remember { mutableStateOf(reportCategories.first()) }
     var incidentDetails by remember { mutableStateOf("") }
+    var alsoBlock by remember { mutableStateOf(true) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -182,7 +183,7 @@ fun ReportDialog(
                             RadioButton(
                                 selected = selectedCategory == category,
                                 onClick = { selectedCategory = category },
-                                colors = RadioButtonDefaults.colors(selectedColor = CrimsonPrimary)
+                                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -207,7 +208,7 @@ fun ReportDialog(
 
                 OutlinedTextField(
                     value = incidentDetails,
-                    onValueChange = { incidentDetails = it },
+                    onValueChange = { incidentDetails = it.take(1000) },
                     placeholder = { Text("Describe what happened or why this profile is suspicious...", fontSize = 13.sp) },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -215,16 +216,36 @@ fun ReportDialog(
                     shape = RoundedCornerShape(12.dp),
                     maxLines = 4,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = CrimsonPrimary
+                        focusedBorderColor = MaterialTheme.colorScheme.primary
                     )
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("report_also_block_row"),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.Checkbox(
+                        checked = alsoBlock,
+                        onCheckedChange = { alsoBlock = it },
+                        colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                    )
+                    Text(
+                        text = "Also block ${targetUser.name.split(" ").first()} so you never see each other again",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Action Buttons
                 Button(
                     onClick = {
-                        onSubmitReport(selectedCategory, incidentDetails.ifBlank { "Reported under $selectedCategory" })
+                        onSubmitReport(selectedCategory, incidentDetails.ifBlank { "Reported under $selectedCategory" }, alsoBlock)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -240,7 +261,7 @@ fun ReportDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Submit to Campus Safety",
+                        text = "Send Report",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )

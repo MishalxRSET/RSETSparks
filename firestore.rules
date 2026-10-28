@@ -1,25 +1,194 @@
 rules_version = '2';
+
+// RSETSparks Firestore security rules.
+// Every read/write requires a signed-in user whose verified email ends in @rajagiri.edu.in.
+// Admins are users with a document at /admins/{uid}; create those only from the Firebase console.
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isAuthenticated() {
+
+    // ---------- helpers ----------
+    function signedIn() {
       return request.auth != null;
     }
 
-    function isRajagiriEmail() {
-      return isAuthenticated() && 
-        request.auth.token.email.matches('.*@rajagiri[.]edu[.]in$');
+    function isCampusUser() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('.*@rajagiri[.]edu[.]in$');
     }
 
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && request.auth.uid == userId && isRajagiriEmail();
+    function isAdmin() {
+      return isCampusUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Only call when the user document is known to exist.
+    function isSuspended(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.get('suspended', false) == true;
+    }
+
+    function activeUser() {
+      return isCampusUser() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && !isSuspended(request.auth.uid);
+    }
+
+    function changedOnly(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    function isLike(swipeId) {
+      let path = /databases/$(database)/documents/swipes/$(swipeId);
+      return exists(path) && get(path).data.action in ['LIKE', 'SUPER_SPARK'];
+    }
+
+    function pairId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    function validProfile(uid, data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 60
+        && data.age is int && data.age >= 18 && data.age <= 99
+        && data.department is string && data.department.size() <= 80
+        && data.year is int
+        && data.bio is string && data.bio.size() <= 500
+        && data.interests is list && data.interests.size() <= 15
+        && data.get('photoUrl', '') is string
+        // Only admins may display the officer badge.
+        && (data.get('showBadges', false) == false
+            || exists(/databases/$(database)/documents/admins/$(uid)));
+    }
+
+    // ---------- admins (console-managed only) ----------
+    match /admins/{uid} {
+      allow get: if isCampusUser() && request.auth.uid == uid;
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------- public student profiles ----------
+    match /users/{uid} {
+      allow read: if isCampusUser();
+
+      allow create: if isCampusUser()
+        && request.auth.uid == uid
+        && validProfile(uid, request.resource.data)
+        && request.resource.data.get('suspended', false) == false
+        && request.resource.data.get('warningCount', 0) == 0
+        && request.resource.data.get('verified', true) == true;
+
+      // Owners edit their own profile but never moderation fields.
+      allow update: if isCampusUser() && request.auth.uid == uid
+        && !isSuspended(uid)
+        && validProfile(uid, request.resource.data)
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['suspended', 'warningCount', 'verified']);
+
+      // Admins may only touch moderation fields.
+      allow update: if isAdmin() && changedOnly(['suspended', 'warningCount', 'verified', 'updatedAt']);
+
+      allow delete: if isCampusUser() && request.auth.uid == uid;
+    }
+
+    // ---------- private account data (email) ----------
+    match /privateProfiles/{uid} {
+      allow read: if (isCampusUser() && request.auth.uid == uid) || isAdmin();
+      allow create, update: if isCampusUser() && request.auth.uid == uid
+        && request.resource.data.email == request.auth.token.email;
+      allow delete: if isCampusUser() && request.auth.uid == uid;
+    }
+
+    // ---------- swipes: /swipes/{from}_{to} ----------
+    match /swipes/{swipeId} {
+      // You can read someone's swipe on you only after liking them yourself, so likes stay
+      // secret until they become a match.
+      allow get: if isCampusUser()
+        && (resource == null
+            || resource.data.from == request.auth.uid
+            || (resource.data.to == request.auth.uid && isLike(request.auth.uid + '_' + resource.data.from)));
+      allow list: if isCampusUser() && resource.data.from == request.auth.uid;
+
+      allow create, update: if activeUser()
+        && swipeId == request.auth.uid + '_' + request.resource.data.to
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to != request.auth.uid
+        && request.resource.data.action in ['LIKE', 'PASS', 'SUPER_SPARK'];
+
+      allow delete: if isCampusUser() && resource.data.from == request.auth.uid;
+    }
+
+    // ---------- matches: /matches/{uidA}_{uidB} (sorted) ----------
+    match /matches/{matchId} {
+      function participant() {
+        return isCampusUser() && request.auth.uid in resource.data.users;
+      }
+
+      allow read: if (isCampusUser() && (resource == null || request.auth.uid in resource.data.users)) || isAdmin();
+
+      // A match can only be created when both students liked each other.
+      allow create: if activeUser()
+        && request.resource.data.users is list
+        && request.resource.data.users.size() == 2
+        && request.auth.uid in request.resource.data.users
+        && matchId == pairId(request.resource.data.users[0], request.resource.data.users[1])
+        && isLike(request.resource.data.users[0] + '_' + request.resource.data.users[1])
+        && isLike(request.resource.data.users[1] + '_' + request.resource.data.users[0]);
+
+      allow update: if participant() && activeUser()
+        && changedOnly(['lastMessage', 'lastMessageAt', 'lastSenderId']);
+
+      // Either student can unmatch (also used when blocking).
+      allow delete: if participant();
+
+      match /messages/{messageId} {
+        function matchDoc() {
+          return get(/databases/$(database)/documents/matches/$(matchId));
+        }
+
+        allow read: if (isCampusUser() && request.auth.uid in matchDoc().data.users) || isAdmin();
+
+        allow create: if activeUser()
+          && request.auth.uid in matchDoc().data.users
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt == request.time;
+
+        allow update: if false;
+        // Senders can remove their own messages (used by account deletion).
+        allow delete: if isCampusUser() && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // ---------- blocks: /blocks/{blocker}_{blocked} ----------
+    match /blocks/{blockId} {
+      allow read: if isCampusUser()
+        && (resource == null || resource.data.blocker == request.auth.uid || resource.data.blocked == request.auth.uid);
+      allow create: if isCampusUser()
+        && blockId == request.auth.uid + '_' + request.resource.data.blocked
+        && request.resource.data.blocker == request.auth.uid
+        && request.resource.data.blocked != request.auth.uid;
+      allow delete: if isCampusUser() && resource.data.blocker == request.auth.uid;
+      allow update: if false;
+    }
+
+    // ---------- safety reports ----------
+    match /reports/{reportId} {
+      allow create: if activeUser()
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.reportedUserId != request.auth.uid
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.reason is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 1000;
+      allow read: if isAdmin() || (isCampusUser() && resource.data.reporterId == request.auth.uid);
+      allow update: if isAdmin() && changedOnly(['status', 'adminNote', 'resolvedAt', 'resolvedBy']);
       allow delete: if false;
     }
 
-    match /reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.reporterId == request.auth.uid;
-      allow update, delete: if isAuthenticated();
+    // ---------- moderation audit trail (append-only, admins only) ----------
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminUid == request.auth.uid;
+      allow update, delete: if false;
     }
   }
 }

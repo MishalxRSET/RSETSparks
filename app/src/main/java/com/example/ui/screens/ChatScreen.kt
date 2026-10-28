@@ -26,10 +26,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.HeartBroken
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,7 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.ChatMessageEntity
+import com.example.data.model.ChatMessage
 import com.example.data.model.UserEntity
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.AmberGold
@@ -73,15 +82,20 @@ import java.util.Locale
 fun ChatScreen(
     currentUser: UserEntity,
     partner: UserEntity,
-    messages: List<ChatMessageEntity>,
+    messages: List<ChatMessage>,
     onSendMessage: (String) -> Unit,
     onReportUser: (UserEntity) -> Unit,
+    onBlockUser: (UserEntity) -> Unit,
+    onUnmatch: (UserEntity) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
 
     var inputText by remember { mutableStateOf("") }
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmAction by remember { mutableStateOf<String?>(null) } // "BLOCK" or "UNMATCH"
+    val firstName = partner.name.split(" ").firstOrNull() ?: partner.name
     val listState = rememberLazyListState()
 
     val shouldShowOfficerBadges = partner.isAdmin && partner.showBadges
@@ -155,7 +169,7 @@ fun ChatScreen(
                             text = if (shouldShowOfficerBadges)
                                 "Campus Safety Directorate • Official Moderation"
                             else
-                                "${partner.getEffectiveDepartment()} • Class of '${partner.year.toString().takeLast(2)}",
+                                "${partner.department} • Class of '${partner.year.toString().takeLast(2)}",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -176,15 +190,30 @@ fun ChatScreen(
                 }
             },
             actions = {
-                // Safety Shield / Report Button
                 IconButton(
-                    onClick = { onReportUser(partner) },
-                    modifier = Modifier.testTag("chat_report_button")
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.testTag("chat_menu_button")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = "Report to Campus Safety",
-                        tint = Color(0xFFEF4444)
+                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Safety options")
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Report $firstName") },
+                        leadingIcon = { Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = { menuOpen = false; onReportUser(partner) },
+                        modifier = Modifier.testTag("chat_report_button")
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Block $firstName") },
+                        leadingIcon = { Icon(Icons.Default.Block, contentDescription = null) },
+                        onClick = { menuOpen = false; confirmAction = "BLOCK" },
+                        modifier = Modifier.testTag("chat_block_button")
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Unmatch") },
+                        leadingIcon = { Icon(Icons.Default.HeartBroken, contentDescription = null) },
+                        onClick = { menuOpen = false; confirmAction = "UNMATCH" },
+                        modifier = Modifier.testTag("chat_unmatch_button")
                     )
                 }
             },
@@ -193,7 +222,28 @@ fun ChatScreen(
             )
         )
 
-        // Security / Encryption Notice
+        confirmAction?.let { action ->
+            val blocking = action == "BLOCK"
+            AlertDialog(
+                onDismissRequest = { confirmAction = null },
+                title = { Text(if (blocking) "Block $firstName?" else "Unmatch $firstName?") },
+                text = {
+                    Text(
+                        if (blocking) "You won't see each other in Sparks or chats again. $firstName won't be told."
+                        else "This conversation will close for both of you."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmAction = null
+                        if (blocking) onBlockUser(partner) else onUnmatch(partner)
+                    }) { Text(if (blocking) "Block" else "Unmatch", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = { confirmAction = null }) { Text("Cancel") } }
+            )
+        }
+
+        // Privacy notice
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -213,7 +263,7 @@ fun ChatScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "End-to-End Encrypted (AES-GCM). Only you & ${partner.name.split(" ").firstOrNull() ?: partner.name} can read these messages.",
+                    text = "Only you and $firstName can see this chat. If either of you reports it, campus moderators can review it.",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 14.sp
@@ -261,7 +311,7 @@ fun ChatScreen(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -278,13 +328,13 @@ fun ChatScreen(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
-                placeholder = { Text("Send encrypted spark message...", fontSize = 14.sp) },
+                placeholder = { Text("Message $firstName...", fontSize = 14.sp) },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("chat_input_field"),
                 shape = RoundedCornerShape(24.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = CrimsonPrimary,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                 ),
                 maxLines = 3
@@ -320,7 +370,7 @@ fun ChatScreen(
 
 @Composable
 fun MessageBubble(
-    message: ChatMessageEntity,
+    message: ChatMessage,
     isMe: Boolean
 ) {
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -357,7 +407,7 @@ fun MessageBubble(
         ) {
             Column {
                 Text(
-                    text = message.plainSnippet,
+                    text = message.text,
                     color = if (isMe) Color.White else MaterialTheme.colorScheme.onSurface,
                     fontSize = 15.sp,
                     lineHeight = 20.sp
@@ -378,8 +428,8 @@ fun MessageBubble(
                     if (isMe) {
                         Spacer(modifier = Modifier.width(4.dp))
                         Icon(
-                            imageVector = Icons.Default.DoneAll,
-                            contentDescription = "Delivered",
+                            imageVector = if (message.isPending) Icons.Default.Schedule else Icons.Default.Done,
+                            contentDescription = if (message.isPending) "Sending" else "Sent",
                             tint = Color.White.copy(alpha = 0.85f),
                             modifier = Modifier.size(13.dp)
                         )

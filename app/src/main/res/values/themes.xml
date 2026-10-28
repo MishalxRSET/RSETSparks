@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.NoActionBar" />
+    <!-- Shown by the system while the app process starts (Android 12+ splash API, back-ported by core-splashscreen). -->
+    <style name="Theme.RSETSparks.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/brand_cream</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.RSETSparks</item>
+    </style>
+
+    <style name="Theme.RSETSparks" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/brand_cream</item>
+        <item name="android:colorPrimary">@color/brand_burgundy</item>
+        <item name="android:colorAccent">@color/brand_rose</item>
+    </style>
 </resources>

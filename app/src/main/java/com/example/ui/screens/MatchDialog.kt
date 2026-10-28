@@ -67,7 +67,7 @@ fun MatchDialog(
                     .fillMaxWidth(0.9f)
                     .padding(16.dp),
                 shape = RoundedCornerShape(28.dp),
-                color = Color(0xFF1E293B),
+                color = com.example.ui.theme.Slate800,
                 shadowElevation = 16.dp
             ) {
                 Column(
@@ -103,6 +103,7 @@ fun MatchDialog(
                             name = currentUser.name,
                             emoji = currentUser.avatarEmoji,
                             colorIndex = currentUser.avatarColorIndex,
+                            photoUri = currentUser.photoUri,
                             size = 80.dp,
                             isVerified = currentUser.isVerified,
                             isAdmin = currentUser.isAdmin,
@@ -133,6 +134,7 @@ fun MatchDialog(
                             name = matchedUser.name,
                             emoji = matchedUser.avatarEmoji,
                             colorIndex = matchedUser.avatarColorIndex,
+                            photoUri = matchedUser.photoUri,
                             size = 80.dp,
                             isVerified = matchedUser.isVerified,
                             isAdmin = matchedUser.isAdmin,
@@ -143,7 +145,7 @@ fun MatchDialog(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = "${matchedUser.getEffectiveDepartment()} • Class of '${matchedUser.year.toString().takeLast(2)}",
+                        text = "${matchedUser.department} • Class of '${matchedUser.year.toString().takeLast(2)}",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = CoralAccent
@@ -168,7 +170,7 @@ fun MatchDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Start Encrypted Chat",
+                            text = "Say Hello",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
