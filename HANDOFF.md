@@ -44,13 +44,13 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 > **Free (Spark) mode is on:** `rsetsparks.blaze=false` in `gradle.properties`. The app hides profile photos and
 > push notifications, and the setup script skips Blaze billing, the Storage bucket and Cloud Functions. To turn
 > them on later: upgrade the project to Blaze (set a budget alert), set `rsetsparks.blaze=true`, re-run the script.
-- [ ] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
+- [x] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
       sign-in providers and the Storage bucket). It creates the project, registers the app with fingerprints, creates Firestore
       (asia-south1), writes `app/google-services.json` and `.firebaserc`, deploys rules, indexes, functions and the
       legal pages (Firebase Hosting), and rewrites the URLs in `strings.xml`.
-- [ ] 🤖 `node scripts/doctor.mjs`: `google-services.json`, `.firebaserc` and the legal URLs should all be ✔.
-- [ ] 🤖 Open `https://<project-id>.web.app/privacy-policy.html` (curl it) to confirm the policy is live.
-- [ ] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
+- [x] 🤖 `node scripts/doctor.mjs`: `google-services.json`, `.firebaserc` and the legal URLs should all be ✔.
+- [x] 🤖 Open `https://<project-id>.web.app/privacy-policy.html` (curl it) to confirm the policy is live.
+- [x] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
 
 ### 4. First run on a device
 - [ ] 👤 Start an emulator with Google Play (Android Studio → Device Manager) or plug in a phone (USB debugging on).
@@ -140,3 +140,7 @@ Append a line per session: date, what was done, what's next.
 - 2026-10-28 (local, Windows): §1 done. Wrote `local.properties` (SDK at `%LOCALAPPDATA%\Android\Sdk`; use forward
   slashes, backslashes get eaten). Gradle auto-installed SDK Platform 36.1 + Build-Tools 36. Unit tests 7/7, debug APK
   builds, rules tests 21/21, function tests 5/5. `adb` not on PATH yet. Next: §2 upload key (owner), §3 Firebase.
+- 2026-10-28 (local): §3 done on the free Spark plan. Project `rsetsparks01` (owner account alteracc39210@gmail.com),
+  Firestore asia-south1, rules + indexes + legal pages deployed (https://rsetsparks01.web.app). New projects need the
+  Firestore API enabled first (the script's 403 links to it). Debug fingerprints registered; re-run the script after §2
+  to add the upload key's. Next: §2 upload key, §4 first run on a device (add platform-tools to PATH).

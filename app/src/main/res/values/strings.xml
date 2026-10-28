@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">RSETSparks</string>
-    <string name="privacy_policy_url" translatable="false">https://mishalxrset.github.io/RSETSparks/privacy-policy.html</string>
-    <string name="terms_url" translatable="false">https://mishalxrset.github.io/RSETSparks/terms.html</string>
-    <string name="account_deletion_url" translatable="false">https://mishalxrset.github.io/RSETSparks/delete-account.html</string>
+    <string name="privacy_policy_url" translatable="false">https://rsetsparks01.web.app/privacy-policy.html</string>
+    <string name="terms_url" translatable="false">https://rsetsparks01.web.app/terms.html</string>
+    <string name="account_deletion_url" translatable="false">https://rsetsparks01.web.app/delete-account.html</string>
     <string name="support_email" translatable="false">u2504040@rajagiri.edu.in</string>
 </resources>
