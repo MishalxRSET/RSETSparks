@@ -1,13 +1,30 @@
 # Firebase setup
 
-RSETSparks stores everything in **your own** Firebase project: Authentication, Cloud Firestore and Cloud Storage.
-Do this once before the first Play Store build. It takes about 30 minutes.
+RSETSparks stores everything in **your own** Firebase project: Authentication, Cloud Firestore, Cloud Storage,
+and Cloud Functions plus Cloud Messaging for push notifications.
+Do this once before the first Play Store build.
+
+## Quick path: the setup script (about 15 minutes)
+
+On your computer (Windows, macOS or Linux), with [Node.js 20+](https://nodejs.org) and Android Studio installed:
+
+```bash
+node scripts/setup-firebase.mjs
+```
+
+It signs you in to Firebase, creates the project and registers the Android app with your signing fingerprints.
+It also creates Firestore in Mumbai, downloads `app/google-services.json`, and deploys the security rules, indexes and
+push-notification functions. For the three things the CLI can't do (Blaze billing, sign-in providers, Storage bucket),
+it opens the right console page and waits for you. Re-running it is safe.
+
+After it finishes, do §5 (make yourself a moderator), §6 (App Check) and §7 (reviewer account) below.
+The numbered sections are the same steps done by hand, if you prefer that or the script fails.
 
 ## 1. Create the project
 
 1. Go to <https://console.firebase.google.com> → **Add project** → name it `rsetsparks`.
    Google Analytics is not used; you can turn it off.
-2. **Upgrade to Blaze** (⚙ → Usage and billing → Modify plan). Cloud Storage for profile photos needs it.
+2. **Upgrade to Blaze** (⚙ → Usage and billing → Modify plan). Cloud Storage (profile photos) and Cloud Functions (push notifications) need it.
    Campus-scale usage normally stays inside the free quota. Set a budget alert (for example ₹500/month) so there are no surprises.
 
 ## 2. Register the Android app
@@ -49,13 +66,18 @@ Authentication → **Templates**: edit the *Email address verification* and *Pas
    npm install -g firebase-tools
    firebase login
    firebase use --add            # pick your project, alias "default"
-   firebase deploy --only firestore:rules,firestore:indexes,storage
+   (cd functions && npm ci)
+   firebase deploy --only firestore:rules,firestore:indexes,storage,functions
    ```
+
+   The `functions` deploy sends push notifications for new matches and messages (`functions/index.js`, region asia-south1).
+   The first deploy turns on the Cloud Functions, Cloud Build and Artifact Registry APIs for you.
 
    The rules are covered by tests. Run them locally before every deploy:
 
    ```bash
    cd firebase-tests && npm ci && npm test
+   cd ../functions && npm ci && npm test
    ```
 
 ## 5. Make yourself a moderator

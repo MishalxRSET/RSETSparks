@@ -1,6 +1,11 @@
 package com.example
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -32,7 +37,9 @@ import com.example.ui.components.RSETSparksSplashScreen
 import com.example.ui.screens.AdminConsoleScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.ChatScreen
+import com.example.notifications.Notifications
 import com.example.ui.screens.DiscoveryScreen
+import com.example.ui.screens.EditProfileScreen
 import com.example.ui.screens.FirebaseSetupScreen
 import com.example.ui.screens.MatchDialog
 import com.example.ui.screens.MatchesScreen
@@ -53,11 +60,23 @@ class MainActivity : ComponentActivity() {
         // Keep the branded system splash up until we know whether the student is signed in.
         splash.setKeepOnScreenCondition { viewModel.session.value is SessionState.Loading }
         enableEdgeToEdge()
+        handleNotificationIntent(intent)
         setContent {
             MyApplicationTheme {
                 RSETSparksApp(viewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val partnerId = intent?.getStringExtra(Notifications.EXTRA_OPEN_CHAT_WITH) ?: return
+        intent.removeExtra(Notifications.EXTRA_OPEN_CHAT_WITH)
+        viewModel.openChatWith(partnerId)
     }
 }
 
@@ -135,11 +154,21 @@ private fun SignedInApp(viewModel: RSETSparksViewModel, credentialManager: Crede
     val auditLogsList by viewModel.auditLogsList.collectAsStateWithLifecycle()
     val pendingReportsCount by viewModel.pendingReportsCount.collectAsStateWithLifecycle()
 
+    val pushEnabled by viewModel.pushEnabled.collectAsStateWithLifecycle()
     val me = currentUser ?: return
+
+    // Ask once for notification permission (Android 13+) when the student first reaches the app.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     BackHandler(enabled = currentScreen !is Screen.DISCOVERY) {
         when (currentScreen) {
             is Screen.CHAT -> viewModel.navigateTo(Screen.MATCHES)
+            is Screen.EDIT_PROFILE -> viewModel.navigateTo(Screen.PROFILE)
             else -> viewModel.navigateTo(Screen.DISCOVERY)
         }
     }
@@ -220,8 +249,16 @@ private fun SignedInApp(viewModel: RSETSparksViewModel, credentialManager: Crede
                             onToggleAdminBadges = { showBadges -> viewModel.toggleAdminShowBadges(showBadges) }
                         )
                     }
+                    is Screen.EDIT_PROFILE -> EditProfileScreen(
+                        user = me,
+                        onSave = viewModel::saveProfileEdits,
+                        onCancel = { viewModel.navigateTo(Screen.PROFILE) }
+                    )
                     is Screen.PROFILE -> ProfileScreen(
                         currentUser = me,
+                        pushEnabled = pushEnabled,
+                        onTogglePush = viewModel::setPushEnabled,
+                        onEditProfile = { viewModel.navigateTo(Screen.EDIT_PROFILE) },
                         onAdminClick = { viewModel.navigateTo(Screen.ADMIN) },
                         onLogout = { viewModel.signOut(credentialManager) },
                         onDeleteAccount = { viewModel.deleteAccount(credentialManager) },

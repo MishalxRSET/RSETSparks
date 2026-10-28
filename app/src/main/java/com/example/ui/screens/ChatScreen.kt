@@ -66,7 +66,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationManagerCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.example.data.model.ChatMessage
+import com.example.notifications.Notifications
 import com.example.data.model.UserEntity
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.AmberGold
@@ -91,6 +95,15 @@ fun ChatScreen(
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
+
+    val context = LocalContext.current
+    LifecycleResumeEffect(partner.id) {
+        Notifications.activeChatPartnerId = partner.id
+        NotificationManagerCompat.from(context).cancel("message:${partner.id}", 0)
+        onPauseOrDispose {
+            if (Notifications.activeChatPartnerId == partner.id) Notifications.activeChatPartnerId = null
+        }
+    }
 
     var inputText by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }

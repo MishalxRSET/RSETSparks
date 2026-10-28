@@ -101,7 +101,8 @@ Category: **Dating**. Contact email: your support email. Privacy policy URL: `ht
 
 ## Known limitations / next steps
 
-- **No push notifications yet.** Students only see new matches and messages with the app open.
-  Adding them needs Firebase Cloud Messaging plus a Cloud Function (Blaze is already on), which is a good v1.1 feature.
-- **No profile editing after onboarding** apart from the visibility switch. Also a v1.1 candidate.
+- Push notifications depend on the deployed Cloud Functions (`functions/`). If pushes stop arriving, check
+  `firebase functions:log` first.
+- Message notifications show the text in the shade but hide it on a secure lock screen. Students can turn pushes
+  off in Profile → Notifications or per channel in Android settings.
 - Chats are protected by security rules, TLS and Google's at-rest encryption, but they are **not end-to-end encrypted**. Never claim E2E in the listing.

@@ -14,6 +14,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.firestore
 import com.google.firebase.storage.FirebaseStorage
 import com.google.firebase.storage.storage
@@ -73,7 +74,7 @@ class AppRepository(
     }
 
     suspend fun createProfile(uid: String, email: String, profile: UserProfile, isAdmin: Boolean): Result<Unit> = runCatching {
-        val photoUrl = profile.localPhotoUri?.let { uploadProfilePhoto(uid, Uri.parse(it)) }
+        val photoUrl = resolvePhoto(uid, profile.photoUri)
         val data = FirestoreMappers.userToMap(
             id = uid,
             profile = profile,
@@ -81,9 +82,38 @@ class AppRepository(
             colorIndex = (0..6).random(),
             visible = !isAdmin // Moderators start hidden from the discovery deck
         ) + mapOf("createdAt" to FieldValue.serverTimestamp(), "updatedAt" to FieldValue.serverTimestamp())
-        privateProfiles.document(uid).set(mapOf("email" to email, "createdAt" to FieldValue.serverTimestamp())).await()
+        privateProfiles.document(uid)
+            .set(mapOf("email" to email, "createdAt" to FieldValue.serverTimestamp()), SetOptions.merge()).await()
         users.document(uid).set(data).await()
         Unit
+    }
+
+    /** Edits the editable profile fields; moderation fields are untouched (and protected by the rules). */
+    suspend fun updateProfile(uid: String, profile: UserProfile): Result<Unit> = runCatching {
+        val photoUrl = resolvePhoto(uid, profile.photoUri)
+        users.document(uid).update(
+            mapOf(
+                "name" to profile.name.trim(),
+                "age" to profile.age.toLong(),
+                "department" to profile.department,
+                "year" to profile.year.toLong(),
+                "bio" to profile.bio.trim(),
+                "interests" to profile.interests,
+                "photoUrl" to (photoUrl ?: ""),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+        Unit
+    }
+
+    /** Uploads a newly picked photo, keeps an already-uploaded one, or deletes the photo when removed. */
+    private suspend fun resolvePhoto(uid: String, photoUri: String?): String? = when {
+        photoUri == null -> {
+            runCatching { storage.reference.child("profilePhotos/$uid/avatar.jpg").delete().await() }
+            null
+        }
+        photoUri.startsWith("https://") -> photoUri
+        else -> uploadProfilePhoto(uid, Uri.parse(photoUri))
     }
 
     private suspend fun uploadProfilePhoto(uid: String, localUri: Uri): String {
@@ -91,6 +121,32 @@ class AppRepository(
         ref.putFile(localUri, com.google.firebase.storage.StorageMetadata.Builder().setContentType("image/jpeg").build()).await()
         return ref.downloadUrl.await().toString()
     }
+
+    // ---------------------------------------------------------------- push notifications
+
+    /** Stores this device's FCM token so Cloud Functions can notify the student. */
+    suspend fun registerPushToken(uid: String, email: String, token: String) {
+        privateProfiles.document(uid)
+            .set(mapOf("email" to email, "fcmTokens" to FieldValue.arrayUnion(token)), SetOptions.merge()).await()
+    }
+
+    suspend fun unregisterPushToken(uid: String, email: String, token: String) {
+        privateProfiles.document(uid)
+            .set(mapOf("email" to email, "fcmTokens" to FieldValue.arrayRemove(token)), SetOptions.merge()).await()
+    }
+
+    fun observePushEnabled(uid: String): Flow<Boolean> = callbackFlow {
+        val reg = privateProfiles.document(uid).addSnapshotListener { snap, _ ->
+            trySend(snap?.getBoolean("pushEnabled") ?: true)
+        }
+        awaitClose { reg.remove() }
+    }
+
+    suspend fun setPushEnabled(uid: String, email: String, enabled: Boolean) {
+        privateProfiles.document(uid).set(mapOf("email" to email, "pushEnabled" to enabled), SetOptions.merge()).await()
+    }
+
+    suspend fun getUser(id: String): UserEntity? = fetchUser(id)
 
     suspend fun updateVisibility(uid: String, visible: Boolean) {
         users.document(uid).update(mapOf("visible" to visible, "updatedAt" to FieldValue.serverTimestamp())).await()

@@ -7,7 +7,7 @@
 <body>
 <header><img src="icon.png" alt="RSETSparks crest"><h1>RSET<span>Sparks</span></h1><p>Privacy Policy</p></header>
 <main>
-<p class="updated">Last updated: 28 October 2026</p>
+<p class="updated">Last updated: 29 October 2026</p>
 
 <p>RSETSparks ("we", "the app") is an independent, student-run app for verified students of Rajagiri institutions who are 18 or older.
 This policy explains what we collect, why, and the choices you have. RSETSparks is not an official service of Rajagiri School of Engineering &amp; Technology or any Rajagiri institution.</p>
@@ -21,6 +21,7 @@ This policy explains what we collect, why, and the choices you have. RSETSparks 
 <tr><td>Likes and passes</td><td>Matching</td><td>Only you; the other student learns of a like only when you match</td></tr>
 <tr><td>Matches and chat messages</td><td>Messaging between matched students</td><td>You and your match. Moderators can review a conversation if it is reported or during a documented safety investigation.</td></tr>
 <tr><td>Blocks and reports you make</td><td>Safety and moderation</td><td>Moderators</td></tr>
+<tr><td>Push notification token (Firebase Cloud Messaging) and your notification on/off setting</td><td>Sending you notifications about new matches and messages</td><td>Only our server functions. Removed when you sign out or delete your account</td></tr>
 <tr><td>App integrity tokens (Firebase App Check / Google Play Integrity)</td><td>Blocking fake or modified apps from our backend</td><td>Processed by Google; not linked to your profile by us</td></tr>
 </table>
 <p>We do not collect your location, contacts, or device advertising ID. We do not show ads, and we do not sell or share your data for advertising.</p>
@@ -28,7 +29,9 @@ This policy explains what we collect, why, and the choices you have. RSETSparks 
 <h2>How it is stored</h2>
 <p>Data is stored with Google Firebase (Authentication, Cloud Firestore and Cloud Storage), which encrypts it in transit (TLS) and at rest.
 Access is restricted by server-side security rules: only verified Rajagiri accounts can read profiles, and only matched students can read their chats.
-Chats are not end-to-end encrypted.</p>
+Chats are not end-to-end encrypted.
+Notifications are delivered through Google Firebase Cloud Messaging. A message notification shows the sender's first name and a short preview,
+which Android hides on a secure lock screen. You can turn notifications off in the app (Profile → Notifications) at any time.</p>
 
 <h2>Moderation</h2>
 <p>When you report someone, the report includes the last messages of your conversation so moderators can review it. Moderators can suspend accounts.

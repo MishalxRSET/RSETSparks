@@ -1,11 +1,12 @@
 package com.example.data.model
 
-/** Profile details collected during onboarding, before they are written to Firestore. */
+/** Profile details entered during onboarding or profile editing, before they are written to Firestore. */
 data class UserProfile(
     val name: String,
     val bio: String,
     val interests: List<String>,
-    val localPhotoUri: String? = null, // content:// URI picked or captured on this device
+    // content:// = new photo to upload, https:// = keep the existing uploaded photo, null = no photo
+    val photoUri: String? = null,
     val department: String,
     val year: Int,
     val age: Int

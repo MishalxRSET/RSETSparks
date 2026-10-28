@@ -91,7 +91,11 @@ service cloud.firestore {
     match /privateProfiles/{uid} {
       allow read: if (isCampusUser() && request.auth.uid == uid) || isAdmin();
       allow create, update: if isCampusUser() && request.auth.uid == uid
-        && request.resource.data.email == request.auth.token.email;
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.keys().hasOnly(['email', 'createdAt', 'fcmTokens', 'pushEnabled'])
+        && request.resource.data.get('fcmTokens', []) is list
+        && request.resource.data.get('fcmTokens', []).size() <= 10
+        && request.resource.data.get('pushEnabled', true) is bool;
       allow delete: if isCampusUser() && request.auth.uid == uid;
     }
 

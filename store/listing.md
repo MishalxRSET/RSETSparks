@@ -27,6 +27,7 @@ SPARK, MATCH, CHAT
 • Like, pass or send a Super Spark
 • When you both like each other, it's a Spark and you can start chatting
 • Icebreakers make the first message easy
+• Get notified about new Sparks and messages
 
 YOU'RE IN CONTROL
 • Hide your profile from the deck any time with one switch
@@ -48,6 +49,13 @@ RSETSparks is an independent, student-run app and is not an official service of 
 
 - Category: **Dating**
 - Tags: Dating, Social, Campus
+
+## What's new (release notes, v1.1.0)
+
+```
+• Push notifications for new Sparks and messages (turn them off any time in Profile)
+• Edit your profile: update your photo, bio, interests and details
+```
 
 ## What's new (release notes, v1.0.0)
 

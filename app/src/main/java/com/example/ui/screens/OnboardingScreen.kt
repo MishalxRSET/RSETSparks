@@ -77,16 +77,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.example.data.model.UserEntity
 import com.example.data.model.UserProfile
 import com.example.ui.theme.CampusVerifiedGreen
 import com.example.ui.theme.CrimsonPrimary
 import java.io.File
 
 /**
- * Profile setup shown once, after the student's Rajagiri email is verified:
- * photo (camera or photo picker), name, age (18+), department, year, bio and interests.
+ * Profile setup shown once, after the student's Rajagiri email is verified.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OnboardingScreen(
     email: String,
@@ -94,15 +93,57 @@ fun OnboardingScreen(
     onSubmit: (profile: UserProfile, onError: (String) -> Unit) -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
+) = ProfileFormScreen(
+    email = email,
+    existing = null,
+    suggestedName = suggestedName,
+    onSubmit = onSubmit,
+    secondaryActionLabel = "Use a different account",
+    onSecondaryAction = onSignOut,
+    modifier = modifier
+)
+
+/** Lets a signed-in student change their profile details and photo. */
+@Composable
+fun EditProfileScreen(
+    user: UserEntity,
+    onSave: (profile: UserProfile, onError: (String) -> Unit) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier
+) = ProfileFormScreen(
+    email = user.email,
+    existing = user,
+    suggestedName = user.name,
+    onSubmit = onSave,
+    secondaryActionLabel = "Cancel",
+    onSecondaryAction = onCancel,
+    modifier = modifier
+)
+
+/**
+ * Shared profile form: photo (camera or photo picker), name, age (18+), department, year, bio and
+ * interests. [existing] switches it from onboarding to edit mode.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProfileFormScreen(
+    email: String,
+    existing: UserEntity?,
+    suggestedName: String,
+    onSubmit: (profile: UserProfile, onError: (String) -> Unit) -> Unit,
+    secondaryActionLabel: String,
+    onSecondaryAction: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val editing = existing != null
 
     var name by remember { mutableStateOf(suggestedName) }
-    var age by remember { mutableStateOf("") }
-    var department by remember { mutableStateOf("B.Tech Computer Science") }
-    var year by remember { mutableStateOf("") }
-    var bio by remember { mutableStateOf("") }
-    var photoUriString by remember { mutableStateOf<String?>(null) }
+    var age by remember { mutableStateOf(existing?.age?.toString().orEmpty()) }
+    var department by remember { mutableStateOf(existing?.department ?: "B.Tech Computer Science") }
+    var year by remember { mutableStateOf(existing?.year?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var bio by remember { mutableStateOf(existing?.bio.orEmpty()) }
+    var photoUriString by remember { mutableStateOf(existing?.photoUri) }
     var customInterestInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -128,7 +169,7 @@ fun OnboardingScreen(
     }
 
     val selectedInterests = remember {
-        mutableStateOf(setOf<String>())
+        mutableStateOf(existing?.getInterestsList()?.toSet() ?: setOf())
     }
 
     val departments = listOf(
@@ -212,7 +253,7 @@ fun OnboardingScreen(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
                     Text(
-                        text = "Set up your profile",
+                        text = if (editing) "Edit your profile" else "Set up your profile",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -335,12 +376,18 @@ fun OnboardingScreen(
 
                 if (photoUriString != null) {
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "✓ Profile picture attached",
-                        fontSize = 11.sp,
-                        color = CampusVerifiedGreen,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "✓ Profile picture attached",
+                            fontSize = 11.sp,
+                            color = CampusVerifiedGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(
+                            onClick = { photoUriString = null },
+                            modifier = Modifier.testTag("remove_photo_button")
+                        ) { Text("Remove", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+                    }
                 }
             }
         }
@@ -614,7 +661,7 @@ fun OnboardingScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(
+        if (!editing) Text(
             text = "By continuing you confirm you are 18 or older and agree to the Terms of Use and Privacy Policy.",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -629,7 +676,7 @@ fun OnboardingScreen(
                     name = name.trim(),
                     bio = bio.trim(),
                     interests = selectedInterests.value.toList(),
-                    localPhotoUri = photoUriString,
+                    photoUri = photoUriString,
                     department = department,
                     year = year.toIntOrNull() ?: 0,
                     age = age.toIntOrNull() ?: 0
@@ -647,7 +694,7 @@ fun OnboardingScreen(
             shape = RoundedCornerShape(16.dp)
         ) {
             Text(
-                text = "Start Sparking",
+                text = if (editing) "Save Changes" else "Start Sparking",
                 fontWeight = FontWeight.Bold,
                 fontSize = 15.sp
             )
@@ -656,12 +703,12 @@ fun OnboardingScreen(
         Spacer(modifier = Modifier.height(8.dp))
 
         TextButton(
-            onClick = onSignOut,
+            onClick = onSecondaryAction,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("onboarding_sign_out_button")
+                .testTag("profile_form_secondary_button")
         ) {
-            Text(text = "Use a different account", color = MaterialTheme.colorScheme.primary)
+            Text(text = secondaryActionLabel, color = MaterialTheme.colorScheme.primary)
         }
 
         Spacer(modifier = Modifier.height(24.dp))

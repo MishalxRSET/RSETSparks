@@ -79,6 +79,19 @@ describe('who can get in', () => {
   });
 });
 
+describe('push tokens', () => {
+  test('students manage only their own tokens and settings', async () => {
+    await assertSucceeds(setDoc(doc(as('alice'), 'privateProfiles', 'alice'),
+      { email: 'alice@rajagiri.edu.in', fcmTokens: ['tok1'], pushEnabled: true }, { merge: true }));
+    await assertFails(setDoc(doc(as('bob'), 'privateProfiles', 'alice'),
+      { email: 'bob@rajagiri.edu.in', fcmTokens: ['evil'] }, { merge: true }));
+    await assertFails(setDoc(doc(as('alice'), 'privateProfiles', 'alice'),
+      { email: 'alice@rajagiri.edu.in', isAdmin: true }, { merge: true }));
+    await assertFails(setDoc(doc(as('alice'), 'privateProfiles', 'alice'),
+      { email: 'alice@rajagiri.edu.in', fcmTokens: Array.from({ length: 11 }, (_, i) => `t${i}`) }, { merge: true }));
+  });
+});
+
 describe('profiles', () => {
   test('a student can create their own 18+ profile', async () => {
     await assertSucceeds(setDoc(doc(as('dave'), 'users', 'dave'), profile()));
@@ -94,6 +107,12 @@ describe('profiles', () => {
     await assertFails(updateDoc(doc(as('carol'), 'users', 'carol'), { suspended: false }));
     await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { showBadges: true }));
     await assertSucceeds(updateDoc(doc(as('mod'), 'users', 'mod'), { showBadges: true }));
+  });
+
+  test('students can edit their own profile details but stay 18+', async () => {
+    await assertSucceeds(updateDoc(doc(as('alice'), 'users', 'alice'), { bio: 'New bio', interests: ['Music'], age: 21 }));
+    await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { age: 16 }));
+    await assertFails(updateDoc(doc(as('alice'), 'users', 'bob'), { bio: 'hacked' }));
   });
 
   test('moderators can suspend but not rewrite profiles', async () => {

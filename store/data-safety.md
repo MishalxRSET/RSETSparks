@@ -25,6 +25,6 @@ For every row: **Collected = Yes, Shared = No, Processed ephemerally = No**.
 | Messages → **Other in-app messages** (chats between matches) | Optional (only if the user chats) | App functionality, Fraud prevention / security / compliance (moderation of reported chats) |
 | App activity → **Other user-generated content** (likes/passes, reports, blocks) | Required | App functionality, Fraud prevention / security / compliance |
 | App info and performance → **Diagnostics**: *No* (no Crashlytics/analytics in v1) | — | — |
-| Device or other IDs: *No* (App Check / Play Integrity tokens are not stored or linked to the user by the app) | — | — |
+| Device or other IDs → **Device or other IDs** (Firebase Cloud Messaging push token) | Optional (only if notifications are allowed) | App functionality |
 
 **Not collected:** location, contacts, financial info, health, web browsing, audio, files, calendar, advertising ID.

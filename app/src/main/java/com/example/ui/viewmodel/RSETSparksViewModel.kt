@@ -14,6 +14,7 @@ import com.example.data.repository.AppRepository
 import com.example.security.AuthService
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseUser
+import com.example.notifications.PushTokens
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -39,6 +40,7 @@ sealed class Screen {
     data class CHAT(val partner: UserEntity) : Screen()
     object ADMIN : Screen()
     object PROFILE : Screen()
+    object EDIT_PROFILE : Screen()
 }
 
 /** Where the signed-in student is in the sign-up funnel. */
@@ -177,6 +179,8 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
                             }
                             if (profile != null && !wasReady) {
                                 _currentScreen.value = Screen.DISCOVERY
+                                registerPushToken()
+                                pendingChatPartnerId?.let { openChatWith(it) }
                             }
                             if (profile?.isSuspended == true) {
                                 _toastMessage.value = "Your account has been suspended by campus moderators."
@@ -273,7 +277,63 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun signOut(credentialManager: CredentialManager?) {
-        viewModelScope.launch { auth?.signOut(credentialManager) }
+        viewModelScope.launch {
+            unregisterPushToken()
+            auth?.signOut(credentialManager)
+        }
+    }
+
+    fun saveProfileEdits(profile: UserProfile, onError: (String) -> Unit) {
+        val user = currentUser.value ?: return
+        val repo = repository ?: return
+        UserProfile.validate(profile)?.let { onError(it); return }
+        runAction("Saving your profile...") {
+            repo.updateProfile(user.id, profile)
+                .onSuccess {
+                    _toastMessage.value = "Profile updated."
+                    _currentScreen.value = Screen.PROFILE
+                }
+                .onFailure { onError("Couldn't save your profile: ${it.message}") }
+        }
+    }
+
+    // ------------------------------------------------------------------ push notifications
+
+    val pushEnabled: StateFlow<Boolean> = forUser(true) { user, repo -> repo.observePushEnabled(user.id) }
+
+    private fun registerPushToken() {
+        val repo = repository ?: return
+        viewModelScope.launch { runCatching { PushTokens.register(getApplication(), repo) } }
+    }
+
+    private suspend fun unregisterPushToken() {
+        val user = currentUser.value ?: return
+        val repo = repository ?: return
+        runCatching { PushTokens.unregister(getApplication(), user.id, user.email, repo) }
+    }
+
+    fun setPushEnabled(enabled: Boolean) {
+        val user = currentUser.value ?: return
+        viewModelScope.launch {
+            runCatching { repository?.setPushEnabled(user.id, user.email, enabled) }
+                .onFailure { _toastMessage.value = "Couldn't update notification settings." }
+        }
+    }
+
+    // Set when the app is opened from a notification before the session is ready.
+    private var pendingChatPartnerId: String? = null
+
+    /** Opens the chat with [partnerId], e.g. after tapping a match or message notification. */
+    fun openChatWith(partnerId: String) {
+        if (currentUser.value == null) {
+            pendingChatPartnerId = partnerId
+            return
+        }
+        pendingChatPartnerId = null
+        viewModelScope.launch {
+            val partner = repository?.getUser(partnerId)
+            if (partner != null) navigateTo(Screen.CHAT(partner)) else navigateTo(Screen.MATCHES)
+        }
     }
 
     fun deleteAccount(credentialManager: CredentialManager?) {
@@ -286,6 +346,7 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
             return
         }
         runAction("Deleting your account and data...") {
+            unregisterPushToken()
             repo.deleteAllUserData(user.id)
             service.deleteCurrentUser()
                 .onSuccess {
