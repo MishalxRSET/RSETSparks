@@ -53,13 +53,13 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 - [x] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
 
 ### 4. First run on a device
-- [ ] 👤 Start an emulator with Google Play (Android Studio → Device Manager) or plug in a phone (USB debugging on).
-- [ ] 🤖 `adb devices`, then `./gradlew :app:installDebug`, then `adb shell am start -n com.rsetsparks.app/com.example.MainActivity`.
-- [ ] 🤖 Find the App Check debug token: `adb logcat -d | grep -i "debug secret"`. Give it to the owner to add under
+- [x] 👤 Start an emulator with Google Play (Android Studio → Device Manager) or plug in a phone (USB debugging on).
+- [x] 🤖 `adb devices`, then `./gradlew :app:installDebug`, then `adb shell am start -n com.rsetsparks.app/com.example.MainActivity`.
+- [x] 🤖 Find the App Check debug token: `adb logcat -d | grep -i "debug secret"`. Give it to the owner to add under
       Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Not needed until App Check is *enforced*,
       but harmless to do now.
-- [ ] 👤 Owner signs in with their Rajagiri Google account and completes onboarding.
-- [ ] 👤 Make the owner a moderator: Firestore → collection `admins` → doc ID = their UID (Authentication → Users) →
+- [x] 👤 Owner signs in with their Rajagiri Google account and completes onboarding.
+- [x] 👤 Make the owner a moderator: Firestore → collection `admins` → doc ID = their UID (Authentication → Users) →
       field `role` = `moderator`. Restart the app; the Campus Safety Console tab appears.
 
 ### 5. End-to-end test (two accounts, ideally two devices or an emulator + phone)
@@ -144,3 +144,7 @@ Append a line per session: date, what was done, what's next.
   Firestore asia-south1, rules + indexes + legal pages deployed (https://rsetsparks01.web.app). New projects need the
   Firestore API enabled first (the script's 403 links to it). Debug fingerprints registered; re-run the script after §2
   to add the upload key's. Next: §2 upload key, §4 first run on a device (add platform-tools to PATH).
+- 2026-10-28 (local): §4 done on a Redmi Note 8 (Android 11) over wireless debugging (`adb pair`, then the main-screen
+  IP:port). Owner signed in, onboarded, is a moderator; the admin tab shows. Seen: admin console header fills the
+  screen and pushes the stat cards off the bottom; app content looks dimmed in screenshots (MIUI force-dark?).
+  Next: §5 with a second Rajagiri account.
