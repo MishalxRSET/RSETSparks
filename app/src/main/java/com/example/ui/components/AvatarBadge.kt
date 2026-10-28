@@ -103,7 +103,7 @@ fun StudentAvatar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Shield,
-                    contentDescription = "Campus Safety Officer",
+                    contentDescription = "RSETSparks moderator",
                     tint = Color(0xFFF59E0B),
                     modifier = Modifier.size((size.value * 0.25f).dp)
                 )

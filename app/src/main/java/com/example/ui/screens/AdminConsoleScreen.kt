@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +59,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,10 +67,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -80,6 +91,7 @@ import com.example.ui.theme.CrimsonPrimary
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun AdminConsoleScreen(
@@ -105,14 +117,45 @@ fun AdminConsoleScreen(
     val pendingCount = reports.count { it.status == "PENDING" || it.status == "INVESTIGATING" }
     val suspendedCount = allUsers.count { it.isSuspended }
 
+    // The banner slides away as a tab's list scrolls up and returns on scroll down, so the list
+    // keeps room on small screens and large font sizes.
+    var bannerHeightPx by remember { mutableIntStateOf(0) }
+    var bannerOffsetPx by remember { mutableFloatStateOf(0f) }
+    val collapseBanner = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val newOffset = (bannerOffsetPx + available.y).coerceIn(-bannerHeightPx.toFloat(), 0f)
+                val consumed = newOffset - bannerOffsetPx
+                bannerOffsetPx = newOffset
+                return Offset(0f, consumed)
+            }
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .nestedScroll(collapseBanner)
     ) {
         // Campus Safety Banner
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // Dragging the banner itself also collapses it, for when the tab's list has no room left to scroll.
+                .scrollable(
+                    state = rememberScrollableState { delta ->
+                        collapseBanner.onPreScroll(Offset(0f, delta), NestedScrollSource.UserInput).y
+                    },
+                    orientation = Orientation.Vertical
+                )
+                .clipToBounds()
+                .layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints.copy(minHeight = 0, maxHeight = Constraints.Infinity))
+                    bannerHeightPx = placeable.height
+                    val offset = bannerOffsetPx.roundToInt()
+                    layout(placeable.width, (placeable.height + offset).coerceAtLeast(0)) { placeable.place(0, offset) }
+                },
             color = Color(0xFF0F172A),
             tonalElevation = 6.dp
         ) {
@@ -188,7 +231,7 @@ fun AdminConsoleScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Public Officer Badge Visibility Toggle Card
+                // Public Moderator Badge Visibility Toggle Card
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color.White.copy(alpha = 0.08f),
@@ -214,16 +257,16 @@ fun AdminConsoleScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = if (currentAdmin.showBadges) "Show Badges: ON (Officer Profile)" else "Show Badges: OFF (Student Profile)",
+                                    text = if (currentAdmin.showBadges) "Show Badges: ON (Moderator Profile)" else "Show Badges: OFF (Student Profile)",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                                 Text(
                                     text = if (currentAdmin.showBadges)
-                                        "Officer badge & title visible to students viewing ${currentAdmin.name}"
+                                        "Moderator badge & title visible to students viewing ${currentAdmin.name}"
                                     else
-                                        "Officer badge & title hidden. Displays as standard student ${currentAdmin.name}",
+                                        "Moderator badge & title hidden. Displays as standard student ${currentAdmin.name}",
                                     fontSize = 10.sp,
                                     color = Color(0xFF94A3B8)
                                 )
@@ -255,7 +298,10 @@ fun AdminConsoleScreen(
             tabs.forEachIndexed { index, title ->
                 Tab(
                     selected = selectedTab == index,
-                    onClick = { selectedTab = index },
+                    onClick = {
+                        selectedTab = index
+                        bannerOffsetPx = 0f // an empty tab can't scroll, so show the banner again
+                    },
                     text = {
                         Text(
                             text = title,
@@ -782,7 +828,7 @@ fun StudentRegistryView(
                     student = student,
                     onToggleVerification = { onToggleVerification(student.id, !student.isVerified) },
                     onToggleSuspension = {
-                        val reason = if (!student.isSuspended) "Suspended by Campus Safety Officer" else "Reinstated"
+                        val reason = if (!student.isSuspended) "Suspended by a moderator" else "Reinstated"
                         onToggleSuspension(student.id, !student.isSuspended, reason)
                     },
                     onEmergencyAudit = { onEmergencyAudit(student) }
@@ -975,7 +1021,7 @@ fun AuditTrailView(auditLogs: List<AuditLogEntity>) {
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Officer: ${log.adminEmail}",
+                        text = "Moderator: ${log.adminEmail}",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )

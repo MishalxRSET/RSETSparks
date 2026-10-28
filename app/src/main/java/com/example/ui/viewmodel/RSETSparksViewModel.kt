@@ -388,8 +388,8 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository?.updateShowBadges(user.id, showBadges) }
                 .onSuccess {
-                    _toastMessage.value = if (showBadges) "Officer badge is now visible on your profile."
-                    else "Officer badge hidden."
+                    _toastMessage.value = if (showBadges) "Moderator badge is now visible on your profile."
+                    else "Moderator badge hidden."
                 }
                 .onFailure { _toastMessage.value = it.message }
         }

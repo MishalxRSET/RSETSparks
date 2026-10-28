@@ -173,7 +173,7 @@ fun ProfileScreen(
                             color = Color.White.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = if (showOfficerCard) "CAMPUS OFFICER" else "VERIFIED ID",
+                                text = if (showOfficerCard) "MODERATOR" else "VERIFIED ID",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -458,16 +458,16 @@ fun ProfileScreen(
 
                         Column {
                             Text(
-                                text = if (currentUser.showBadges) "Show Badges: ON (Officer Mode)" else "Show Badges: OFF (Student Mode)",
+                                text = if (currentUser.showBadges) "Show Badges: ON (Moderator Mode)" else "Show Badges: OFF (Student Mode)",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = if (currentUser.showBadges)
-                                    "Campus Safety Officer badge and title are displayed to students viewing your profile."
+                                    "Moderator badge and title are displayed to students viewing your profile."
                                 else
-                                    "Your profile displays as a standard verified student. Officer title & badges remain hidden until enabled.",
+                                    "Your profile displays as a standard verified student. Moderator title & badges remain hidden until enabled.",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 15.sp

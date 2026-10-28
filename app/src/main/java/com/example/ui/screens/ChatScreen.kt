@@ -169,7 +169,7 @@ fun ChatScreen(
                                     border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold)
                                 ) {
                                     Text(
-                                        text = "CAMPUS OFFICER",
+                                        text = "MODERATOR",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
