@@ -246,7 +246,7 @@ fun AdminConsoleScreen(
         ScrollableTabRow(
             selectedTabIndex = selectedTab,
             containerColor = MaterialTheme.colorScheme.surface,
-            contentColor = CrimsonPrimary,
+            contentColor = MaterialTheme.colorScheme.primary,
             edgePadding = 16.dp
         ) {
             tabs.forEachIndexed { index, title ->
@@ -592,7 +592,7 @@ fun IncidentReportCard(
                         text = "Category: ${report.reasonCategory}",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -619,7 +619,7 @@ fun IncidentReportCard(
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = CrimsonPrimary,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -627,14 +627,14 @@ fun IncidentReportCard(
                         text = if (isExpanded) "Hide Secured Chat Transcripts" else "Inspect Secured Chat Transcripts",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
-                    tint = CrimsonPrimary
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
 
@@ -754,7 +754,7 @@ fun StudentRegistryView(
                 .testTag("admin_search_students_input"),
             shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = CrimsonPrimary
+                focusedBorderColor = MaterialTheme.colorScheme.primary
             ),
             singleLine = true
         )
@@ -956,7 +956,7 @@ fun AuditTrailView(auditLogs: List<AuditLogEntity>) {
                             text = log.action,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
-                            color = CrimsonPrimary
+                            color = MaterialTheme.colorScheme.primary
                         )
 
                         val timeStr = remember(log.timestamp) {

@@ -1,13 +1,10 @@
 package com.example.data.model
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "audit_logs")
+/** An append-only moderation record in `auditLogs/{id}`. */
 data class AuditLogEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     val adminEmail: String,
-    val action: String, // "VIEWED_CHAT_TRANSCRIPT", "SUSPENDED_USER", "ISSUED_WARNING", "VERIFIED_USER", "DISMISSED_REPORT"
+    val action: String, // "SUSPENDED_USER", "REINSTATED_USER", "RESOLVED_INCIDENT", "EMERGENCY_CHAT_AUDIT_ACCESSED", ...
     val targetUserId: String,
     val targetUserEmail: String,
     val reason: String,

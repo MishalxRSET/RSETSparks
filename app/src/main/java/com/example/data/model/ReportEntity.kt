@@ -1,20 +1,17 @@
 package com.example.data.model
 
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "reports")
+/** A safety report in `reports/{id}`, reviewed by admins. */
 data class ReportEntity(
-    @PrimaryKey val id: String,
+    val id: String,
     val reporterId: String,
     val reportedUserId: String,
     val reporterEmail: String,
     val reportedEmail: String,
     val reportedUserName: String,
-    val reasonCategory: String, // "Harassment", "Impersonation", "Inappropriate Content", "Campus Safety Risk", "Suspicious Account"
+    val reasonCategory: String,
     val description: String,
     val status: String = "PENDING", // "PENDING", "INVESTIGATING", "RESOLVED_WARNED", "RESOLVED_SUSPENDED", "DISMISSED"
-    val chatTranscriptSnapshot: String = "", // Decrypted transcript snapshot for admin review
+    val chatTranscriptSnapshot: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val adminNote: String = ""
 )

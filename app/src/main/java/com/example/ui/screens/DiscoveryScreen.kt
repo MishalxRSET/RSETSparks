@@ -408,7 +408,7 @@ private fun ProfileCardView(
                             Icon(
                                 imageVector = Icons.Default.Info,
                                 contentDescription = "View Bio Info",
-                                tint = CrimsonPrimary
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -423,12 +423,12 @@ private fun ProfileCardView(
                         Icon(
                             imageVector = Icons.Default.School,
                             contentDescription = null,
-                            tint = CrimsonPrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${candidate.getEffectiveDepartment()} • Class of '${candidate.year.toString().takeLast(2)}",
+                            text = "${candidate.department} • Class of '${candidate.year.toString().takeLast(2)}",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -460,7 +460,7 @@ private fun ProfileCardView(
 
                     // Bio
                     Text(
-                        text = candidate.getEffectiveBio(),
+                        text = candidate.bio,
                         fontSize = 15.sp,
                         lineHeight = 22.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -473,7 +473,7 @@ private fun ProfileCardView(
                         text = "Campus Interests",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = CrimsonPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
 
                     Spacer(modifier = Modifier.height(6.dp))
@@ -489,7 +489,7 @@ private fun ProfileCardView(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Institutional Email Verification Badge
+                    // Verified-student badge (emails are never shown to other students)
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
@@ -507,7 +507,7 @@ private fun ProfileCardView(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Institutional Account: ${candidate.email}",
+                                text = "Verified @rajagiri.edu.in student",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -534,7 +534,7 @@ fun InterestChip(label: String) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
-            color = CrimsonPrimary
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }
@@ -680,7 +680,7 @@ fun EmptyDeckView(
             Icon(
                 imageVector = Icons.Default.LocalFireDepartment,
                 contentDescription = null,
-                tint = CrimsonPrimary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(52.dp)
             )
         }

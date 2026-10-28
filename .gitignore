@@ -16,3 +16,12 @@
 local.properties
 .env
 debug.keystore
+
+# Release signing — never commit keys or their passwords
+*.jks
+*.keystore
+keystore.properties
+
+# Firebase rules tests
+node_modules/
+*-debug.log

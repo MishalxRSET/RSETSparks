@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Profile photos live at /profilePhotos/{uid}/{fileName}.
+// Any verified campus student can view them; only the owner can upload (images under 5 MB) or delete.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isCampusUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('.*@rajagiri[.]edu[.]in$');
+    }
+
+    match /profilePhotos/{uid}/{fileName} {
+      allow read: if isCampusUser();
+      allow write: if isCampusUser()
+        && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isCampusUser() && request.auth.uid == uid;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
