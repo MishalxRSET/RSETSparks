@@ -38,11 +38,16 @@
    cd functions && npm ci && npm test        # push-notification function tests
    ```
 
+## Working with Claude Code locally
+
+See **[HANDOFF.md](HANDOFF.md)**. `CLAUDE.md` gives Claude Code the project context automatically, and
+`node scripts/doctor.mjs` reports what's installed, configured or missing on your machine.
+
 ## Releasing
 
 - Android / Google Play: **[guides/RELEASE_ANDROID.md](guides/RELEASE_ANDROID.md)**
 - Store text and Data safety answers: `store/listing.md`, `store/data-safety.md`
-- Public legal pages (GitHub Pages from `/docs`): privacy policy, terms, account deletion
+- Public legal pages (`docs/`, served by Firebase Hosting): privacy policy, terms, account deletion
 - iOS: planned. The data layer is kept free of Android types so it can be shared or ported.
 
 ## Changing the logo
