@@ -169,7 +169,7 @@ fun ChatScreen(
                                     border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold)
                                 ) {
                                     Text(
-                                        text = "CAMPUS OFFICER",
+                                        text = "MODERATOR",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
@@ -180,7 +180,7 @@ fun ChatScreen(
                         }
                         Text(
                             text = if (shouldShowOfficerBadges)
-                                "Campus Safety Directorate • Official Moderation"
+                                "RSETSparks moderator"
                             else
                                 "${partner.department} • Class of '${partner.year.toString().takeLast(2)}",
                             fontSize = 11.sp,

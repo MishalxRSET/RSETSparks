@@ -264,7 +264,7 @@ fun RSETSparksLoadingAnimation(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_rset_sparks_logo),
-                    contentDescription = "RSET Sparks Official Emblem",
+                    contentDescription = "RSETSparks logo",
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(CircleShape)

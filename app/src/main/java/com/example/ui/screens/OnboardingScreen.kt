@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
+import com.example.BuildConfig
 import com.example.data.model.UserEntity
 import com.example.data.model.UserProfile
 import com.example.ui.theme.CampusVerifiedGreen
@@ -267,126 +268,128 @@ private fun ProfileFormScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        if (BuildConfig.BLAZE) { // photos need a Cloud Storage bucket (Blaze plan)
+            Spacer(modifier = Modifier.height(20.dp))
 
-        // Profile Picture Upload Section (Camera with Gallery Fallback)
-        Card(
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+            // Profile Picture Upload Section (Camera with Gallery Fallback)
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Profile Picture",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "Optional. Use a clear photo of yourself; it's visible to other verified students.",
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Avatar Preview Box
-                Box(
-                    modifier = Modifier
-                        .size(110.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .border(3.dp, CrimsonPrimary, CircleShape),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (photoUriString != null) {
-                        AsyncImage(
-                            model = photoUriString,
-                            contentDescription = "Selected Profile Picture",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Default Avatar",
-                            tint = CrimsonPrimary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(54.dp)
-                        )
-                    }
-                }
+                    Text(
+                        text = "Profile Picture",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Optional. Use a clear photo of yourself; it's visible to other verified students.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                // Camera and Gallery Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Take Photo (Camera)
-                    Button(
-                        onClick = {
-                            // The system camera app captures the photo, so no CAMERA permission is needed.
-                            val uri = createCameraUri()
-                            if (uri != null) {
-                                pendingCameraUri = uri
-                                cameraLauncher.launch(uri)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
-                        shape = RoundedCornerShape(12.dp),
+                    // Avatar Preview Box
+                    Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("camera_capture_button")
+                            .size(110.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(3.dp, CrimsonPrimary, CircleShape),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Camera", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-
-                    // Gallery Fallback
-                    OutlinedButton(
-                        onClick = {
-                            galleryPickerLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        if (photoUriString != null) {
+                            AsyncImage(
+                                model = photoUriString,
+                                contentDescription = "Selected Profile Picture",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
                             )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("gallery_picker_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PhotoLibrary,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = "Gallery", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = "Default Avatar",
+                                tint = CrimsonPrimary.copy(alpha = 0.6f),
+                                modifier = Modifier.size(54.dp)
+                            )
+                        }
                     }
-                }
 
-                if (photoUriString != null) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "✓ Profile picture attached",
-                            fontSize = 11.sp,
-                            color = CampusVerifiedGreen,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(
-                            onClick = { photoUriString = null },
-                            modifier = Modifier.testTag("remove_photo_button")
-                        ) { Text("Remove", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Camera and Gallery Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // Take Photo (Camera)
+                        Button(
+                            onClick = {
+                                // The system camera app captures the photo, so no CAMERA permission is needed.
+                                val uri = createCameraUri()
+                                if (uri != null) {
+                                    pendingCameraUri = uri
+                                    cameraLauncher.launch(uri)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = CrimsonPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("camera_capture_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CameraAlt,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Camera", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Gallery Fallback
+                        OutlinedButton(
+                            onClick = {
+                                galleryPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("gallery_picker_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(text = "Gallery", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (photoUriString != null) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "✓ Profile picture attached",
+                                fontSize = 11.sp,
+                                color = CampusVerifiedGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                            TextButton(
+                                onClick = { photoUriString = null },
+                                modifier = Modifier.testTag("remove_photo_button")
+                            ) { Text("Remove", fontSize = 11.sp, color = MaterialTheme.colorScheme.error) }
+                        }
                     }
                 }
             }

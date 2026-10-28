@@ -74,7 +74,7 @@ fun CampusTopHeader(
             ) {
                 Image(
                     painter = painterResource(id = com.example.R.drawable.ic_rset_sparks_logo),
-                    contentDescription = "RSET Sparks Official Emblem",
+                    contentDescription = "RSETSparks logo",
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "254733317578",
+    "project_id": "rsetsparks01",
+    "storage_bucket": "rsetsparks01.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254733317578:android:2b902e4226863ea95f0b33",
+        "android_client_info": {
+          "package_name": "com.rsetsparks.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "254733317578-o0ul52jhllubl7qempmq2g6nj8763k5b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.rsetsparks.app",
+            "certificate_hash": "b75def179855366a2ea2772a0e0c2b2c6804d67d"
+          }
+        },
+        {
+          "client_id": "254733317578-6oeppu92l6juit0aac7frr42i65s1e2n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGepKYd6Xv1eyJuR1mhmmwXDqi3IqKaGE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "254733317578-6oeppu92l6juit0aac7frr42i65s1e2n.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

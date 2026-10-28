@@ -28,11 +28,11 @@ Done and verified in the cloud (no device, no real Firebase project):
 Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, console, passwords, phone)
 
 ### 1. Machine check
-- [ ] 🤖 `node scripts/doctor.mjs` and fix anything marked ✖ that's in your power (PATH, JAVA_HOME, `local.properties`).
+- [x] 🤖 `node scripts/doctor.mjs` and fix anything marked ✖ that's in your power (PATH, JAVA_HOME, `local.properties`).
       Common Windows fixes: JAVA_HOME → `C:\Program Files\Android\Android Studio\jbr`; add `%JAVA_HOME%\bin` and
       `%LOCALAPPDATA%\Android\Sdk\platform-tools` to PATH (tell the owner; changing PATH needs a new terminal).
-- [ ] 🤖 `./gradlew :app:testDebugUnitTest :app:assembleDebug`. This also creates `~/.android/debug.keystore`.
-- [ ] 🤖 `cd firebase-tests && npm ci && npm test` and `cd functions && npm ci && npm test`.
+- [x] 🤖 `./gradlew :app:testDebugUnitTest :app:assembleDebug`. This also creates `~/.android/debug.keystore`.
+- [x] 🤖 `cd firebase-tests && npm ci && npm test` and `cd functions && npm ci && npm test`.
 
 ### 2. Upload key (do before Firebase so its fingerprint gets registered)
 - [ ] 👤 The owner creates it and chooses the password. Give them this command; don't generate or see the password yourself:
@@ -41,22 +41,25 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 - [ ] 🤖 Confirm with `node scripts/doctor.mjs` (the "Upload key" line), without opening the file.
 
 ### 3. Firebase project
-- [ ] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
+> **Free (Spark) mode is on:** `rsetsparks.blaze=false` in `gradle.properties`. The app hides profile photos and
+> push notifications, and the setup script skips Blaze billing, the Storage bucket and Cloud Functions. To turn
+> them on later: upgrade the project to Blaze (set a budget alert), set `rsetsparks.blaze=true`, re-run the script.
+- [x] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
       sign-in providers and the Storage bucket). It creates the project, registers the app with fingerprints, creates Firestore
       (asia-south1), writes `app/google-services.json` and `.firebaserc`, deploys rules, indexes, functions and the
       legal pages (Firebase Hosting), and rewrites the URLs in `strings.xml`.
-- [ ] 🤖 `node scripts/doctor.mjs`: `google-services.json`, `.firebaserc` and the legal URLs should all be ✔.
-- [ ] 🤖 Open `https://<project-id>.web.app/privacy-policy.html` (curl it) to confirm the policy is live.
-- [ ] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
+- [x] 🤖 `node scripts/doctor.mjs`: `google-services.json`, `.firebaserc` and the legal URLs should all be ✔.
+- [x] 🤖 Open `https://<project-id>.web.app/privacy-policy.html` (curl it) to confirm the policy is live.
+- [x] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
 
 ### 4. First run on a device
-- [ ] 👤 Start an emulator with Google Play (Android Studio → Device Manager) or plug in a phone (USB debugging on).
-- [ ] 🤖 `adb devices`, then `./gradlew :app:installDebug`, then `adb shell am start -n com.rsetsparks.app/com.example.MainActivity`.
-- [ ] 🤖 Find the App Check debug token: `adb logcat -d | grep -i "debug secret"`. Give it to the owner to add under
+- [x] 👤 Start an emulator with Google Play (Android Studio → Device Manager) or plug in a phone (USB debugging on).
+- [x] 🤖 `adb devices`, then `./gradlew :app:installDebug`, then `adb shell am start -n com.rsetsparks.app/com.example.MainActivity`.
+- [x] 🤖 Find the App Check debug token: `adb logcat -d | grep -i "debug secret"`. Give it to the owner to add under
       Firebase console → App Check → Apps → ⋮ → Manage debug tokens. Not needed until App Check is *enforced*,
       but harmless to do now.
-- [ ] 👤 Owner signs in with their Rajagiri Google account and completes onboarding.
-- [ ] 👤 Make the owner a moderator: Firestore → collection `admins` → doc ID = their UID (Authentication → Users) →
+- [x] 👤 Owner signs in with their Rajagiri Google account and completes onboarding.
+- [x] 👤 Make the owner a moderator: Firestore → collection `admins` → doc ID = their UID (Authentication → Users) →
       field `role` = `moderator`. Restart the app; the Campus Safety Console tab appears.
 
 ### 5. End-to-end test (two accounts, ideally two devices or an emulator + phone)
@@ -134,3 +137,17 @@ To let Claude Code run the routine build and test commands without asking each t
 Append a line per session: date, what was done, what's next.
 
 - 2026-10-28 (cloud): built everything above; merged PR #1 to `main`. Next: §1–§3 on the owner's machine.
+- 2026-10-28 (local, Windows): §1 done. Wrote `local.properties` (SDK at `%LOCALAPPDATA%\Android\Sdk`; use forward
+  slashes, backslashes get eaten). Gradle auto-installed SDK Platform 36.1 + Build-Tools 36. Unit tests 7/7, debug APK
+  builds, rules tests 21/21, function tests 5/5. `adb` not on PATH yet. Next: §2 upload key (owner), §3 Firebase.
+- 2026-10-28 (local): §3 done on the free Spark plan. Project `rsetsparks01` (owner account alteracc39210@gmail.com),
+  Firestore asia-south1, rules + indexes + legal pages deployed (https://rsetsparks01.web.app). New projects need the
+  Firestore API enabled first (the script's 403 links to it). Debug fingerprints registered; re-run the script after §2
+  to add the upload key's. Next: §2 upload key, §4 first run on a device (add platform-tools to PATH).
+- 2026-10-28 (local): §4 done on a Redmi Note 8 (Android 11) over wireless debugging (`adb pair`, then the main-screen
+  IP:port). Owner signed in, onboarded, is a moderator; the admin tab shows. Seen: admin console header fills the
+  screen and pushes the stat cards off the bottom; app content looks dimmed in screenshots (MIUI force-dark?).
+  Next: §5 with a second Rajagiri account.
+- 2026-10-29 (local): UI fixes verified on the phone: admin header layout, moderator wording instead of
+  "officer"/"official", collapsing admin banner, double bottom inset under the nav bar. Debug APK shared with a friend
+  for §5. Branch `free-spark-plan` (not pushed yet). Next: §5 with two accounts, then push + PR; §2 upload key.

@@ -345,7 +345,7 @@ private fun ProfileCardView(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isOfficerWithBadge) "Campus Safety Officer" else "Rajagiri Verified Student",
+                                    text = if (isOfficerWithBadge) "RSETSparks Moderator" else "Rajagiri Verified Student",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isOfficerWithBadge) AmberGold else Color(0xFF0F172A)
@@ -384,7 +384,7 @@ private fun ProfileCardView(
                                     border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold)
                                 ) {
                                     Text(
-                                        text = "CAMPUS OFFICER",
+                                        text = "MODERATOR",
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,

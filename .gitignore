@@ -25,3 +25,6 @@ keystore.properties
 # Firebase rules tests
 node_modules/
 *-debug.log
+
+# Firebase CLI deploy cache
+.firebase/

@@ -280,7 +280,7 @@ fun MatchesScreen(
 
                             Text(
                                 text = if (partner.isAdmin && partner.showBadges)
-                                    "Campus Safety Directorate • Official Moderation"
+                                    "RSETSparks moderator"
                                 else
                                     "${partner.department} • Active match",
                                 fontSize = 12.sp,
