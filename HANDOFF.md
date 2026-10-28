@@ -148,3 +148,6 @@ Append a line per session: date, what was done, what's next.
   IP:port). Owner signed in, onboarded, is a moderator; the admin tab shows. Seen: admin console header fills the
   screen and pushes the stat cards off the bottom; app content looks dimmed in screenshots (MIUI force-dark?).
   Next: §5 with a second Rajagiri account.
+- 2026-10-29 (local): UI fixes verified on the phone: admin header layout, moderator wording instead of
+  "officer"/"official", collapsing admin banner, double bottom inset under the nav bar. Debug APK shared with a friend
+  for §5. Branch `free-spark-plan` (not pushed yet). Next: §5 with two accounts, then push + PR; §2 upload key.
