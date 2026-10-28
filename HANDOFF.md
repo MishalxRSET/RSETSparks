@@ -28,11 +28,11 @@ Done and verified in the cloud (no device, no real Firebase project):
 Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, console, passwords, phone)
 
 ### 1. Machine check
-- [ ] 🤖 `node scripts/doctor.mjs` and fix anything marked ✖ that's in your power (PATH, JAVA_HOME, `local.properties`).
+- [x] 🤖 `node scripts/doctor.mjs` and fix anything marked ✖ that's in your power (PATH, JAVA_HOME, `local.properties`).
       Common Windows fixes: JAVA_HOME → `C:\Program Files\Android\Android Studio\jbr`; add `%JAVA_HOME%\bin` and
       `%LOCALAPPDATA%\Android\Sdk\platform-tools` to PATH (tell the owner; changing PATH needs a new terminal).
-- [ ] 🤖 `./gradlew :app:testDebugUnitTest :app:assembleDebug`. This also creates `~/.android/debug.keystore`.
-- [ ] 🤖 `cd firebase-tests && npm ci && npm test` and `cd functions && npm ci && npm test`.
+- [x] 🤖 `./gradlew :app:testDebugUnitTest :app:assembleDebug`. This also creates `~/.android/debug.keystore`.
+- [x] 🤖 `cd firebase-tests && npm ci && npm test` and `cd functions && npm ci && npm test`.
 
 ### 2. Upload key (do before Firebase so its fingerprint gets registered)
 - [ ] 👤 The owner creates it and chooses the password. Give them this command; don't generate or see the password yourself:
@@ -41,6 +41,9 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 - [ ] 🤖 Confirm with `node scripts/doctor.mjs` (the "Upload key" line), without opening the file.
 
 ### 3. Firebase project
+> **Free (Spark) mode is on:** `rsetsparks.blaze=false` in `gradle.properties`. The app hides profile photos and
+> push notifications, and the setup script skips Blaze billing, the Storage bucket and Cloud Functions. To turn
+> them on later: upgrade the project to Blaze (set a budget alert), set `rsetsparks.blaze=true`, re-run the script.
 - [ ] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
       sign-in providers and the Storage bucket). It creates the project, registers the app with fingerprints, creates Firestore
       (asia-south1), writes `app/google-services.json` and `.firebaserc`, deploys rules, indexes, functions and the
@@ -134,3 +137,6 @@ To let Claude Code run the routine build and test commands without asking each t
 Append a line per session: date, what was done, what's next.
 
 - 2026-10-28 (cloud): built everything above; merged PR #1 to `main`. Next: §1–§3 on the owner's machine.
+- 2026-10-28 (local, Windows): §1 done. Wrote `local.properties` (SDK at `%LOCALAPPDATA%\Android\Sdk`; use forward
+  slashes, backslashes get eaten). Gradle auto-installed SDK Platform 36.1 + Build-Tools 36. Unit tests 7/7, debug APK
+  builds, rules tests 21/21, function tests 5/5. `adb` not on PATH yet. Next: §2 upload key (owner), §3 Firebase.

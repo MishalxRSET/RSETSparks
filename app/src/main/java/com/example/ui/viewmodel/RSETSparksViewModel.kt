@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.BuildConfig
 import com.example.data.model.AuditLogEntity
 import com.example.data.model.ChatMessage
 import com.example.data.model.ReportEntity
@@ -302,6 +303,7 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
     val pushEnabled: StateFlow<Boolean> = forUser(true) { user, repo -> repo.observePushEnabled(user.id) }
 
     private fun registerPushToken() {
+        if (!BuildConfig.BLAZE) return
         val repo = repository ?: return
         viewModelScope.launch { runCatching { PushTokens.register(getApplication(), repo) } }
     }

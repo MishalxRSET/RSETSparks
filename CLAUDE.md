@@ -72,6 +72,8 @@ scripts/              setup-firebase.mjs, doctor.mjs, generate_brand_assets.py
 - New data collected → update `docs/privacy-policy.html` **and** `store/data-safety.md`.
 - Never commit or print `keystore.properties`, `*.jks`, or passwords. `app/google-services.json` and `.firebaserc` are fine to commit.
 - Moderators (`admins/{uid}`) are created only in the Firebase console, never from the app.
+- `rsetsparks.blaze` in `gradle.properties` (→ `BuildConfig.BLAZE`) says whether the Firebase project is on Blaze.
+  When false, anything needing Cloud Storage or Cloud Functions (photos, push) must stay hidden in the app and skipped by `setup-firebase.mjs`.
 - Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts` for every Play upload.
 
 ## Conventions

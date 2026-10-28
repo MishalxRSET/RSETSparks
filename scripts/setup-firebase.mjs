@@ -17,6 +17,8 @@ const ROOT = resolve(import.meta.dirname, '..');
 const PACKAGE = 'com.rsetsparks.app';
 const REGION = 'asia-south1'; // Mumbai
 const isWindows = process.platform === 'win32';
+// rsetsparks.blaze in gradle.properties: false = free Spark plan (no Storage bucket, no Cloud Functions).
+const BLAZE = /^rsetsparks\.blaze\s*=\s*true\s*$/m.test(readFileSync(join(ROOT, 'gradle.properties'), 'utf8'));
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
 const step = (n, msg) => console.log(`\n\x1b[35m[${n}] ${msg}\x1b[0m`);
@@ -93,10 +95,14 @@ async function main() {
   const console_ = `https://console.firebase.google.com/project/${projectId}`;
 
   step(3, 'Blaze plan (needed for photo storage and push-notification functions)');
-  await manual('Upgrade to the Blaze (pay-as-you-go) plan', `${console_}/usage/details`, [
-    'Click "Modify plan" → Blaze, link or create a billing account.',
-    'Then set a budget alert (for example ₹500/month) under Google Cloud Billing → Budgets.',
-  ]);
+  if (BLAZE) {
+    await manual('Upgrade to the Blaze (pay-as-you-go) plan', `${console_}/usage/details`, [
+      'Click "Modify plan" → Blaze, link or create a billing account.',
+      'Then set a budget alert (for example ₹500/month) under Google Cloud Billing → Budgets.',
+    ]);
+  } else {
+    warn('Skipped: rsetsparks.blaze=false in gradle.properties, so the app runs on the free Spark plan without photos or push.');
+  }
 
   step(4, 'Android app');
   const apps = firebase(['apps:list', 'ANDROID', '--project', projectId], { json: true }) || [];
@@ -149,10 +155,14 @@ async function main() {
   }
 
   step(8, 'Cloud Storage');
-  await manual('Create the default Storage bucket', `${console_}/storage`, [
-    'Click "Get started" → Production mode → location asia-south1 → Done.',
-    'Skip this if you already see a bucket there.',
-  ]);
+  if (BLAZE) {
+    await manual('Create the default Storage bucket', `${console_}/storage`, [
+      'Click "Get started" → Production mode → location asia-south1 → Done.',
+      'Skip this if you already see a bucket there.',
+    ]);
+  } else {
+    warn('Skipped (Spark plan).');
+  }
 
   step(9, 'App config (google-services.json)');
   firebase(['apps:sdkconfig', 'ANDROID', app.appId, '--project', projectId, '--out', join(ROOT, 'app', 'google-services.json')]);
@@ -161,9 +171,12 @@ async function main() {
   else warn('google-services.json has no web client: make sure Google sign-in is enabled (step 6), then re-run.');
 
   step(10, 'Deploy security rules, indexes, push-notification functions and legal pages');
-  const npm = spawnSync('npm', ['ci'], { cwd: join(ROOT, 'functions'), stdio: 'inherit', shell: isWindows });
-  if (npm.status !== 0) throw new Error('npm ci in functions/ failed');
-  firebase(['deploy', '--only', 'firestore:rules,firestore:indexes,storage,functions,hosting', '--project', projectId, '--force'], { interactive: true });
+  if (BLAZE) {
+    const npm = spawnSync('npm', ['ci'], { cwd: join(ROOT, 'functions'), stdio: 'inherit', shell: isWindows });
+    if (npm.status !== 0) throw new Error('npm ci in functions/ failed');
+  }
+  const targets = BLAZE ? 'firestore:rules,firestore:indexes,storage,functions,hosting' : 'firestore:rules,firestore:indexes,hosting';
+  firebase(['deploy', '--only', targets, '--project', projectId, '--force'], { interactive: true });
   ok('Deployed');
 
   // The privacy policy, terms and account-deletion pages (docs/) are served by Firebase Hosting,
