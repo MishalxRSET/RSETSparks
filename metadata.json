@@ -1,0 +1,6 @@
+{
+  "name": "RSETSparks",
+  "description": "Campus dating app for Rajagiri students with verified .rajagiri.edu.in authentication, Tinder-style swipe discovery, encrypted messaging, and campus safety admin moderation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
