@@ -160,11 +160,20 @@ async function main() {
   if (config.includes('"client_type": 3')) ok('Wrote app/google-services.json (includes the Google Sign-In client)');
   else warn('google-services.json has no web client: make sure Google sign-in is enabled (step 6), then re-run.');
 
-  step(10, 'Deploy security rules, indexes and push-notification functions');
+  step(10, 'Deploy security rules, indexes, push-notification functions and legal pages');
   const npm = spawnSync('npm', ['ci'], { cwd: join(ROOT, 'functions'), stdio: 'inherit', shell: isWindows });
   if (npm.status !== 0) throw new Error('npm ci in functions/ failed');
-  firebase(['deploy', '--only', 'firestore:rules,firestore:indexes,storage,functions', '--project', projectId, '--force'], { interactive: true });
+  firebase(['deploy', '--only', 'firestore:rules,firestore:indexes,storage,functions,hosting', '--project', projectId, '--force'], { interactive: true });
   ok('Deployed');
+
+  // The privacy policy, terms and account-deletion pages (docs/) are served by Firebase Hosting,
+  // which works with a private repo. Point the app's links at them.
+  const site = `https://${projectId}.web.app`;
+  const stringsPath = join(ROOT, 'app', 'src', 'main', 'res', 'values', 'strings.xml');
+  const strings = readFileSync(stringsPath, 'utf8')
+    .replace(/https:\/\/[^<"]+?\/(privacy-policy|terms|delete-account)\.html/g, `${site}/$1.html`);
+  writeFileSync(stringsPath, strings);
+  ok(`Legal pages live at ${site}/privacy-policy.html (app links updated in strings.xml)`);
 
   step(11, 'Almost done: things only you can do');
   console.log(`  1. Build and run the app (Android Studio ▶), sign in once with your Rajagiri account.
@@ -172,7 +181,9 @@ async function main() {
      Start collection "admins" → Document ID = your UID (from ${console_}/authentication/users)
      → field "role" = "moderator". Restart the app.
   3. Before launch: App Check → Play Integrity (guides/FIREBASE_SETUP.md §6).
-  4. Commit app/google-services.json and .firebaserc.`);
+  4. Commit app/google-services.json, .firebaserc and app/src/main/res/values/strings.xml.
+  5. Play Console privacy policy URL: https://${projectId}.web.app/privacy-policy.html
+     Account deletion URL:      https://${projectId}.web.app/delete-account.html`);
   rl.close();
 }
 

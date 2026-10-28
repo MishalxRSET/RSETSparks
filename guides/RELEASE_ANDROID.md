@@ -9,10 +9,8 @@ Work through this list top to bottom. Items marked **(you)** need your accounts 
   Recruit 12+ classmates early.
 - [ ] Identity verification for the developer account (government ID).
 - [ ] Firebase project set up as described in [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
-- [ ] Enable **GitHub Pages** for this repo: Settings → Pages → *Deploy from a branch* → `main` / `/docs`.
-  That publishes the privacy policy, terms and account-deletion pages at `https://mishalxrset.github.io/RSETSparks/`.
-  If you use a different URL, update `app/src/main/res/values/strings.xml`.
-  The repo must be public for free Pages; otherwise host the three `docs/*.html` files anywhere.
+- [ ] Legal pages online. `node scripts/setup-firebase.mjs` deploys `docs/` (privacy policy, terms, account deletion)
+  to **Firebase Hosting** at `https://<project-id>.web.app/` and updates the app's links. This works with a private repo.
 - [ ] Decide the public support email. It is currently your student email in `strings.xml` and `docs/*.html`.
 
 ## 1. Create the upload key (you, once — keep it forever)
@@ -67,7 +65,7 @@ Text is in [`store/listing.md`](../store/listing.md). Graphics are in `store/gra
 | Feature graphic 1024×500 | `store/graphics/play-feature-graphic-1024x500.png` |
 | Phone screenshots (2–8) | **(you)** take them on a phone from the release build with real-looking test profiles. Don't use real students' photos without consent. |
 
-Category: **Dating**. Contact email: your support email. Privacy policy URL: `https://mishalxrset.github.io/RSETSparks/privacy-policy.html`
+Category: **Dating**. Contact email: your support email. Privacy policy URL: `https://<project-id>.web.app/privacy-policy.html`
 
 ### App content (Policy → App content)
 
@@ -83,7 +81,7 @@ Category: **Dating**. Contact email: your support email. Privacy policy URL: `ht
 | Government app | No |
 | Financial features | None |
 | Health | None |
-| Account deletion | In-app path: *Profile → Delete Account*. Web link: `https://mishalxrset.github.io/RSETSparks/delete-account.html` |
+| Account deletion | In-app path: *Profile → Delete Account*. Web link: `https://<project-id>.web.app/delete-account.html` |
 
 ### Testing tracks
 
