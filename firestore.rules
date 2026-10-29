@@ -52,6 +52,12 @@ service cloud.firestore {
         && data.bio is string && data.bio.size() <= 500
         && data.interests is list && data.interests.size() <= 15
         && data.get('photoUrl', '') is string
+        // Same keys as UserProfile.GENDERS / SHOW_ME / ORIENTATIONS / LOOKING_FOR in the app.
+        && data.get('gender', '') in ['MAN', 'WOMAN', 'TRANS_MAN', 'TRANS_WOMAN', 'NON_BINARY']
+        && data.get('showMe', '') in ['MEN', 'WOMEN', 'EVERYONE']
+        && data.get('orientation', '') in ['', 'STRAIGHT', 'GAY', 'LESBIAN', 'BISEXUAL', 'QUEER']
+        && data.get('lookingFor', '') in ['', 'RELATIONSHIP', 'CASUAL', 'FRIENDS', 'NOT_SURE']
+        && data.get('pronouns', '') is string && data.get('pronouns', '').size() <= 20
         // Only admins may display the officer badge.
         && (data.get('showBadges', false) == false
             || exists(/databases/$(database)/documents/admins/$(uid)));

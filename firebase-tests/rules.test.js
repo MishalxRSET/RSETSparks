@@ -30,6 +30,11 @@ const profile = (overrides = {}) => ({
   warningCount: 0,
   visible: true,
   showBadges: false,
+  gender: 'WOMAN',
+  showMe: 'EVERYONE',
+  orientation: '',
+  lookingFor: '',
+  pronouns: '',
   ...overrides,
 });
 
@@ -107,6 +112,19 @@ describe('profiles', () => {
     await assertFails(updateDoc(doc(as('carol'), 'users', 'carol'), { suspended: false }));
     await assertFails(updateDoc(doc(as('alice'), 'users', 'alice'), { showBadges: true }));
     await assertSucceeds(updateDoc(doc(as('mod'), 'users', 'mod'), { showBadges: true }));
+  });
+
+  test('gender and show me are required; dating fields only take known values', async () => {
+    const { gender, showMe, ...legacy } = profile();
+    await assertFails(setDoc(doc(as('dave'), 'users', 'dave'), legacy));
+    await assertFails(setDoc(doc(as('dave'), 'users', 'dave'), profile({ gender: 'BI' })));
+    await assertFails(setDoc(doc(as('dave'), 'users', 'dave'), profile({ showMe: 'ANYONE' })));
+    await assertFails(setDoc(doc(as('dave'), 'users', 'dave'), profile({ orientation: 'OTHER' })));
+    await assertFails(setDoc(doc(as('dave'), 'users', 'dave'), profile({ pronouns: 'x'.repeat(21) })));
+    await assertSucceeds(setDoc(doc(as('dave'), 'users', 'dave'),
+      profile({ gender: 'TRANS_MAN', showMe: 'WOMEN', orientation: 'QUEER', lookingFor: 'RELATIONSHIP', pronouns: 'he/him' })));
+    await assertSucceeds(updateDoc(doc(as('dave'), 'users', 'dave'), { showMe: 'EVERYONE', lookingFor: '' }));
+    await assertFails(updateDoc(doc(as('dave'), 'users', 'dave'), { gender: '' }));
   });
 
   test('students can edit their own profile details but stay 18+', async () => {

@@ -20,7 +20,8 @@ For every row: **Collected = Yes, Shared = No, Processed ephemerally = No**.
 | Personal info → **Name** | Required | App functionality, Account management |
 | Personal info → **Email address** | Required | App functionality, Account management |
 | Personal info → **User IDs** (Firebase UID) | Required | App functionality, Account management |
-| Personal info → **Other info** (age, department, graduation year, bio, interests) | Required | App functionality |
+| Personal info → **Other info** (age, department, graduation year, bio, interests, gender, "Show me" preference, what they're looking for, pronouns) | Required (looking for and pronouns are optional) | App functionality |
+| Personal info → **Sexual orientation** | Optional | App functionality |
 | Photos and videos → **Photos** (profile photo) | Optional | App functionality |
 | Messages → **Other in-app messages** (chats between matches) | Optional (only if the user chats) | App functionality, Fraud prevention / security / compliance (moderation of reported chats) |
 | App activity → **Other user-generated content** (likes/passes, reports, blocks) | Required | App functionality, Fraud prevention / security / compliance |

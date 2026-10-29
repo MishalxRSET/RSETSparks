@@ -101,7 +101,7 @@ class AppRepository(
                 "interests" to profile.interests,
                 "photoUrl" to (photoUrl ?: ""),
                 "updatedAt" to FieldValue.serverTimestamp()
-            )
+            ) + FirestoreMappers.profileDetailsToMap(profile)
         ).await()
         Unit
     }

@@ -18,8 +18,42 @@ class DomainLogicTest {
     interests = listOf("Robotics"),
     department = "B.Tech Computer Science",
     year = 2027,
-    age = 20
+    age = 20,
+    gender = "WOMAN",
+    showMe = "MEN"
   )
+
+  private fun student(gender: String, showMe: String) =
+    FirestoreMappers.userFromMap("u_$gender", FirestoreMappers.userToMap("u_$gender", validProfile.copy(gender = gender, showMe = showMe), null, 0, true))
+
+  @Test
+  fun `gender and show me are required, extras must be known values`() {
+    assertNotNull(UserProfile.validate(validProfile.copy(gender = "")))
+    assertNotNull(UserProfile.validate(validProfile.copy(gender = "BI")))
+    assertNotNull(UserProfile.validate(validProfile.copy(showMe = "")))
+    assertNull(UserProfile.validate(validProfile.copy(orientation = "BISEXUAL", lookingFor = "FRIENDS", pronouns = "she/her")))
+    assertNotNull(UserProfile.validate(validProfile.copy(orientation = "SOMETHING")))
+    assertNotNull(UserProfile.validate(validProfile.copy(lookingFor = "MARRIAGE")))
+    assertNotNull(UserProfile.validate(validProfile.copy(pronouns = "x".repeat(UserProfile.MAX_PRONOUNS_LENGTH + 1))))
+  }
+
+  @Test
+  fun `decks only pair students who each fit the other's show me`() {
+    val womanSeekingMen = student("WOMAN", "MEN")
+    val manSeekingWomen = student("MAN", "WOMEN")
+    val manSeekingMen = student("MAN", "MEN")
+    val transManSeekingWomen = student("TRANS_MAN", "WOMEN")
+    val nonBinarySeekingEveryone = student("NON_BINARY", "EVERYONE")
+    val womanSeekingEveryone = student("WOMAN", "EVERYONE")
+
+    assertTrue(UserProfile.mutualMatch(womanSeekingMen, manSeekingWomen))
+    assertFalse(UserProfile.mutualMatch(womanSeekingMen, manSeekingMen)) // he isn't looking for women
+    assertTrue(UserProfile.mutualMatch(womanSeekingMen, transManSeekingWomen)) // trans men count as men
+    assertFalse(UserProfile.mutualMatch(womanSeekingMen, nonBinarySeekingEveryone)) // she chose men only
+    assertTrue(UserProfile.mutualMatch(womanSeekingEveryone, nonBinarySeekingEveryone))
+    // Legacy profiles without gender never appear in anyone's deck.
+    assertFalse(UserProfile.mutualMatch(womanSeekingEveryone, student("", "EVERYONE")))
+  }
 
   @Test
   fun `only rajagiri emails are accepted`() {
@@ -64,6 +98,15 @@ class DomainLogicTest {
     assertTrue(user.isVisibleInSparks)
     assertFalse(user.isSuspended)
     assertFalse(user.showBadges)
+    assertEquals("WOMAN", user.gender)
+    assertEquals("MEN", user.showMe)
+
+    val extras = FirestoreMappers.userFromMap(
+      "uid1",
+      FirestoreMappers.userToMap("uid1", validProfile.copy(orientation = "QUEER", lookingFor = "FRIENDS", pronouns = " she/they "), null, 0, true)
+    )
+    assertEquals("Woman · she/they · Queer", extras.identityLine())
+    assertEquals("Friends", extras.lookingForLabel())
   }
 
   @Test

@@ -100,7 +100,11 @@ class RSETSparksViewModel(application: Application) : AndroidViewModel(applicati
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), default)
 
-    val discoveryCandidates: StateFlow<List<UserEntity>> = forUser(emptyList()) { user, repo -> repo.discoveryCandidates(user.id) }
+    // Filtered here rather than in the listener so editing "Show me" or gender updates the deck straight away.
+    val discoveryCandidates: StateFlow<List<UserEntity>> =
+        combine(forUser(emptyList()) { user, repo -> repo.discoveryCandidates(user.id) }, currentUser) { people, me ->
+            if (me == null) emptyList() else people.filter { UserProfile.mutualMatch(me, it) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val matches: StateFlow<List<UserEntity>> = forUser(emptyList()) { user, repo -> repo.matchedUsers(user.id) }
 

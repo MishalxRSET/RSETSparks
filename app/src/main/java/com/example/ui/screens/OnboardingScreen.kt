@@ -110,15 +110,18 @@ fun EditProfileScreen(
     user: UserEntity,
     onSave: (profile: UserProfile, onError: (String) -> Unit) -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    notice: String? = null,
+    cancelLabel: String = "Cancel"
 ) = ProfileFormScreen(
     email = user.email,
     existing = user,
     suggestedName = user.name,
     onSubmit = onSave,
-    secondaryActionLabel = "Cancel",
+    secondaryActionLabel = cancelLabel,
     onSecondaryAction = onCancel,
-    modifier = modifier
+    modifier = modifier,
+    notice = notice
 )
 
 /**
@@ -134,7 +137,8 @@ private fun ProfileFormScreen(
     onSubmit: (profile: UserProfile, onError: (String) -> Unit) -> Unit,
     secondaryActionLabel: String,
     onSecondaryAction: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    notice: String? = null
 ) {
     val context = LocalContext.current
     val editing = existing != null
@@ -145,6 +149,11 @@ private fun ProfileFormScreen(
     var year by remember { mutableStateOf(existing?.year?.takeIf { it > 0 }?.toString().orEmpty()) }
     var bio by remember { mutableStateOf(existing?.bio.orEmpty()) }
     var photoUriString by remember { mutableStateOf(existing?.photoUri) }
+    var gender by remember { mutableStateOf(existing?.gender.orEmpty()) }
+    var showMe by remember { mutableStateOf(existing?.showMe.orEmpty()) }
+    var orientation by remember { mutableStateOf(existing?.orientation.orEmpty()) }
+    var lookingFor by remember { mutableStateOf(existing?.lookingFor.orEmpty()) }
+    var pronouns by remember { mutableStateOf(existing?.pronouns.orEmpty()) }
     var customInterestInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -235,6 +244,22 @@ private fun ProfileFormScreen(
     Column(
         modifier = rootModifier
     ) {
+        if (notice != null) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = notice,
+                    modifier = Modifier.padding(14.dp),
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
         // Institutional Verification Badge
         Surface(
             shape = RoundedCornerShape(12.dp),
@@ -486,6 +511,29 @@ private fun ProfileFormScreen(
 
         Spacer(modifier = Modifier.height(18.dp))
 
+        OptionChips("Gender", null, UserProfile.GENDERS, gender, optional = false, tag = "reg_gender") { gender = it }
+        Spacer(modifier = Modifier.height(14.dp))
+        OptionChips("Show me", "Whose profiles appear in your Sparks deck", UserProfile.SHOW_ME, showMe, optional = false, tag = "reg_show_me") { showMe = it }
+        Spacer(modifier = Modifier.height(14.dp))
+        OptionChips("Orientation", "Optional · shown on your profile", UserProfile.ORIENTATIONS, orientation, optional = true, tag = "reg_orientation") { orientation = it }
+        Spacer(modifier = Modifier.height(14.dp))
+        OptionChips("Looking for", "Optional · shown on your profile", UserProfile.LOOKING_FOR, lookingFor, optional = true, tag = "reg_looking_for") { lookingFor = it }
+        Spacer(modifier = Modifier.height(14.dp))
+
+        OutlinedTextField(
+            value = pronouns,
+            onValueChange = { if (it.length <= UserProfile.MAX_PRONOUNS_LENGTH) pronouns = it },
+            label = { Text("Pronouns (optional)") },
+            placeholder = { Text("e.g. she/her") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("reg_pronouns_input"),
+            shape = RoundedCornerShape(14.dp)
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
         // Student Bio Field
         Text(
             text = "Campus Bio",
@@ -682,7 +730,12 @@ private fun ProfileFormScreen(
                     photoUri = photoUriString,
                     department = department,
                     year = year.toIntOrNull() ?: 0,
-                    age = age.toIntOrNull() ?: 0
+                    age = age.toIntOrNull() ?: 0,
+                    gender = gender,
+                    showMe = showMe,
+                    orientation = orientation,
+                    lookingFor = lookingFor,
+                    pronouns = pronouns.trim()
                 )
                 errorMessage = UserProfile.validate(profile)
                 if (errorMessage == null) {
@@ -715,5 +768,45 @@ private fun ProfileFormScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+/** Single-choice chips in the department style. Optional groups clear when the selected chip is tapped again. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun OptionChips(
+    title: String,
+    hint: String?,
+    options: Map<String, String>,
+    selected: String,
+    optional: Boolean,
+    tag: String,
+    onSelect: (String) -> Unit
+) {
+    Text(text = title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+    if (hint != null) Text(text = hint, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(modifier = Modifier.height(6.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        options.forEach { (key, label) ->
+            val isSelected = selected == key
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSelected) CrimsonPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier
+                    .testTag("${tag}_$key")
+                    .clickable { onSelect(if (isSelected && optional) "" else key) }
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    fontSize = 12.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
     }
 }

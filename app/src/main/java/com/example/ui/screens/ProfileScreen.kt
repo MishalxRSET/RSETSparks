@@ -227,6 +227,13 @@ fun ProfileScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
+                            currentUser.identityLine().takeIf { it.isNotEmpty() }?.let {
+                                Text(text = it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            currentUser.lookingForLabel()?.let {
+                                Text(text = "Looking for: $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Row(verticalAlignment = Alignment.CenterVertically) {

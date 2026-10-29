@@ -456,6 +456,15 @@ private fun ProfileCardView(
                         )
                     }
 
+                    candidate.identityLine().takeIf { it.isNotEmpty() }?.let {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(text = it, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    candidate.lookingForLabel()?.let {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(text = "Looking for: $it", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Bio

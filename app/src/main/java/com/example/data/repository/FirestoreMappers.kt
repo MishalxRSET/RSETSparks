@@ -35,6 +35,15 @@ object FirestoreMappers {
         "visible" to visible,
         "showBadges" to false,
         "uid" to id
+    ) + profileDetailsToMap(profile)
+
+    /** The gender / "Show me" / optional dating fields, shared by profile creation and edits. */
+    fun profileDetailsToMap(profile: UserProfile): Map<String, Any?> = mapOf(
+        "gender" to profile.gender,
+        "showMe" to profile.showMe,
+        "orientation" to profile.orientation,
+        "lookingFor" to profile.lookingFor,
+        "pronouns" to profile.pronouns.trim()
     )
 
     fun userFromMap(id: String, data: Map<String, Any?>, email: String = "", isAdmin: Boolean? = null): UserEntity {
@@ -57,7 +66,12 @@ object FirestoreMappers {
             isSuspended = data["suspended"] as? Boolean ?: false,
             warningCount = (data["warningCount"] as? Number)?.toInt() ?: 0,
             isVisibleInSparks = data["visible"] as? Boolean ?: true,
-            showBadges = showBadges
+            showBadges = showBadges,
+            gender = data["gender"] as? String ?: "",
+            showMe = data["showMe"] as? String ?: "",
+            orientation = data["orientation"] as? String ?: "",
+            lookingFor = data["lookingFor"] as? String ?: "",
+            pronouns = data["pronouns"] as? String ?: ""
         )
     }
 

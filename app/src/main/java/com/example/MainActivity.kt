@@ -157,6 +157,18 @@ private fun SignedInApp(viewModel: RSETSparksViewModel, credentialManager: Crede
     val pushEnabled by viewModel.pushEnabled.collectAsStateWithLifecycle()
     val me = currentUser ?: return
 
+    // Profiles made before gender / "Show me" existed fill them in once; the deck filter needs both.
+    if (me.gender.isEmpty() || me.showMe.isEmpty()) {
+        EditProfileScreen(
+            user = me,
+            onSave = viewModel::saveProfileEdits,
+            onCancel = { viewModel.signOut(credentialManager) },
+            notice = "New in RSETSparks: tell us your gender and who you'd like to see, so your Sparks deck shows the right people.",
+            cancelLabel = "Sign out"
+        )
+        return
+    }
+
     // Ask once for notification permission (Android 13+) when the student first reaches the app.
     // Skipped on the Spark plan, where no Cloud Functions send pushes.
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }

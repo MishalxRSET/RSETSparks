@@ -19,8 +19,20 @@ data class UserEntity(
     val warningCount: Int = 0,
     val isVisibleInSparks: Boolean = true,
     val campusZone: String = "Rajagiri Valley Campus, Kakkanad",
-    val showBadges: Boolean = false
+    val showBadges: Boolean = false,
+    val gender: String = "", // keys from UserProfile.GENDERS etc.; blank on profiles made before these fields existed
+    val showMe: String = "",
+    val orientation: String = "",
+    val lookingFor: String = "",
+    val pronouns: String = ""
 ) {
+    /** e.g. "Woman · she/her · Bisexual"; empty when nothing is set. */
+    fun identityLine(): String = listOfNotNull(
+        UserProfile.GENDERS[gender], pronouns.ifBlank { null }, UserProfile.ORIENTATIONS[orientation]
+    ).joinToString(" · ")
+
+    fun lookingForLabel(): String? = UserProfile.LOOKING_FOR[lookingFor]
+
     fun getInterestsList(): List<String> =
         if (interests.isBlank()) emptyList() else interests.split(",").map { it.trim() }.filter { it.isNotEmpty() }
 }
