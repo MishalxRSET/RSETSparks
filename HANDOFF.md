@@ -64,17 +64,17 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 
 ### 5. End-to-end test (two accounts, ideally two devices or an emulator + phone)
 Run through this and record pass/fail in this file. For each failure, read `adb logcat`, fix it, add a test where possible, and open a PR.
-- [ ] Email/password sign-up → verification email arrives → app unlocks automatically
-- [ ] Google sign-in with a non-Rajagiri account is refused
-- [ ] Onboarding: under 18 is refused; photo from camera and from gallery both upload
-- [ ] A and B like each other → both see "It's a Spark!" and get a push if the app is backgrounded
-- [ ] Chat both ways in real time; with the app closed, a message push arrives and tapping it opens the chat
-- [ ] Edit profile (change photo, bio) → the other account sees the change
-- [ ] Profile → Notifications off → no more pushes
-- [ ] Report (with "also block") → the report appears in the moderator console; the blocked users vanish for each other
-- [ ] Unmatch closes the chat for both
-- [ ] Delete account (sign in again first if asked) → data gone in Firestore, auth user gone
-- [ ] Dark mode and a small screen look right
+- [x] Email/password sign-up → verification email arrives → app unlocks automatically
+- [x] Google sign-in with a non-Rajagiri account is refused
+- [x] Onboarding: under 18 is refused; photo from camera and from gallery both upload (photos N/A on Spark)
+- [x] A and B like each other → both see "It's a Spark!" and get a push if the app is backgrounded (push N/A on Spark)
+- [x] Chat both ways in real time; with the app closed, a message push arrives and tapping it opens the chat (push N/A on Spark)
+- [x] Edit profile (change photo, bio) → the other account sees the change
+- [ ] Profile → Notifications off → no more pushes (N/A on Spark; retest on Blaze)
+- [x] Report (with "also block") → the report appears in the moderator console; the blocked users vanish for each other
+- [x] Unmatch closes the chat for both
+- [x] Delete account (sign in again first if asked) → data gone in Firestore, auth user gone
+- [x] Dark mode and a small screen look right
 
 Useful while testing: `npx firebase-tools@14 functions:log` (push problems), Firestore console (data),
 `adb logcat -s AppRepository AuthService FirebaseMessaging`.
@@ -151,3 +151,7 @@ Append a line per session: date, what was done, what's next.
 - 2026-10-29 (local): UI fixes verified on the phone: admin header layout, moderator wording instead of
   "officer"/"official", collapsing admin banner, double bottom inset under the nav bar. Debug APK shared with a friend
   for §5. Branch `free-spark-plan` (not pushed yet). Next: §5 with two accounts, then push + PR; §2 upload key.
+- 2026-10-29 (local): added gender (required), "Show me" (required, mutual deck filter), optional orientation,
+  looking for, pronouns; existing accounts are asked once. Rules + privacy page deployed, fast-forwarded to `main`.
+  §5 passed on two phones (Spark plan: photo upload and push checks N/A, retest them if the project moves to Blaze).
+  Next: §2 upload key, then §6.
