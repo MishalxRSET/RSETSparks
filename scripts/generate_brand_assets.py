@@ -19,6 +19,8 @@ ROOT = Path(__file__).resolve().parent.parent
 MASTER = ROOT / "branding" / "rsetsparks-logo-2048.png"
 RES = ROOT / "app" / "src" / "main" / "res"
 STORE = ROOT / "store" / "graphics"
+IOS_ASSETS = ROOT / "iosApp" / "iosApp" / "Assets.xcassets"
+SHARED_RES = ROOT / "shared" / "src" / "commonMain" / "composeResources"
 
 CREAM = (250, 247, 242, 255)
 BURGUNDY = (111, 10, 36, 255)
@@ -99,9 +101,6 @@ def android_assets(crest: Image.Image) -> None:
         round_icon.alpha_composite(fit(crest, legacy))
         save_webp(round_icon, RES / f"mipmap-{name}" / "ic_launcher_round.webp")
 
-        # In-app crest (used at up to ~160dp).
-        save_webp(fit(crest, round(160 * scale)), RES / f"drawable-{name}" / "ic_rset_sparks_logo.webp")
-
         # Android 12+ splash icon: 240dp canvas, content must sit inside a 160dp circle.
         save_webp(on_canvas(crest, round(240 * scale), round(156 * scale)), RES / f"drawable-{name}" / "splash_logo.webp")
 
@@ -138,9 +137,67 @@ def store_assets(crest: Image.Image) -> None:
     fg.convert("RGB").save(STORE / "play-feature-graphic-1024x500.png")
 
 
+def write_json(path: Path, data: dict) -> None:
+    import json
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def color_set(name: str, light: tuple, dark: tuple) -> None:
+    def comp(c):
+        return {"color-space": "srgb", "components": {
+            "red": f"0x{c[0]:02X}", "green": f"0x{c[1]:02X}", "blue": f"0x{c[2]:02X}", "alpha": "1.000"}}
+    write_json(IOS_ASSETS / f"{name}.colorset" / "Contents.json", {
+        "colors": [
+            {"idiom": "universal", "color": comp(light)},
+            {"idiom": "universal", "appearances": [{"appearance": "luminosity", "value": "dark"}], "color": comp(dark)},
+        ],
+        "info": {"author": "xcode", "version": 1},
+    })
+
+
+def ios_assets(crest: Image.Image) -> None:
+    """Xcode asset catalog for iosApp: app icon, launch-screen logo and brand colours."""
+    write_json(IOS_ASSETS / "Contents.json", {"info": {"author": "xcode", "version": 1}})
+
+    # App Store / home-screen icon: one 1024px image, no transparency (Xcode derives the other sizes).
+    icon_dir = IOS_ASSETS / "AppIcon.appiconset"
+    icon_dir.mkdir(parents=True, exist_ok=True)
+    on_canvas(crest, 1024, 944, CREAM).convert("RGB").save(icon_dir / "AppIcon.png")
+    write_json(icon_dir / "Contents.json", {
+        "images": [{"filename": "AppIcon.png", "idiom": "universal", "platform": "ios", "size": "1024x1024"}],
+        "info": {"author": "xcode", "version": 1},
+    })
+
+    # Launch screen: the crest at 160pt on the LaunchBackground colour (matches the Android splash).
+    logo_dir = IOS_ASSETS / "LaunchLogo.imageset"
+    logo_dir.mkdir(parents=True, exist_ok=True)
+    for scale in (2, 3):
+        fit(crest, 160 * scale).save(logo_dir / f"LaunchLogo@{scale}x.png")
+    write_json(logo_dir / "Contents.json", {
+        "images": [
+            {"idiom": "universal", "scale": "1x"},
+            {"filename": "LaunchLogo@2x.png", "idiom": "universal", "scale": "2x"},
+            {"filename": "LaunchLogo@3x.png", "idiom": "universal", "scale": "3x"},
+        ],
+        "info": {"author": "xcode", "version": 1},
+    })
+
+    color_set("LaunchBackground", CREAM[:3], (26, 5, 12))
+    color_set("AccentColor", BURGUNDY[:3], (215, 72, 100))
+
+
+def shared_assets(crest: Image.Image) -> None:
+    """In-app crest for the shared Compose UI (Android + iOS), at Android density buckets."""
+    for name, scale in DENSITIES.items():
+        save_webp(fit(crest, round(160 * scale)), SHARED_RES / f"drawable-{name}" / "ic_rset_sparks_logo.webp")
+
+
 def main() -> None:
     crest = load_crest()
     android_assets(crest)
+    shared_assets(crest)
+    ios_assets(crest)
     store_assets(crest)
     print("Brand assets generated.")
 

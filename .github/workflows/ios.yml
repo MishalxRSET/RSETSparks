@@ -1,0 +1,38 @@
+name: iOS build
+
+# Full Xcode build of iosApp for the Simulator (no signing). Manual only: on a private repo, macOS minutes
+# count 10x against the free quota. Run it from the Actions tab before handing a build to testers.
+on:
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Shared tests on the iOS Simulator
+        run: ./gradlew :shared:iosSimulatorArm64Test
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd iosApp && xcodegen
+
+      - name: Build for the iOS Simulator
+        run: |
+          cd iosApp
+          xcodebuild build \
+            -project RSETSparks.xcodeproj \
+            -scheme RSETSparks \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO

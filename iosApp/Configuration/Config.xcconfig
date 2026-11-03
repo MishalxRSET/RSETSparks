@@ -1,0 +1,6 @@
+// Per-project iOS settings. scripts/setup-firebase.mjs fills in GOOGLE_REVERSED_CLIENT_ID from
+// iosApp/iosApp/GoogleService-Info.plist (REVERSED_CLIENT_ID); Google Sign-In needs it as a URL scheme.
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.REPLACE_ME
+
+// Your Apple Developer team (Xcode → Signing & Capabilities). Leave empty to run on the Simulator only.
+DEVELOPMENT_TEAM =

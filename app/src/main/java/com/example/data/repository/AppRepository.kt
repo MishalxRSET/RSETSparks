@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.net.Uri
 import android.util.Log
+import com.example.data.AppBackend
 import com.example.data.model.AuditLogEntity
 import com.example.data.model.ChatMessage
 import com.example.data.model.ReportEntity
@@ -11,6 +12,7 @@ import com.example.data.repository.FirestoreMappers.blockId
 import com.example.data.repository.FirestoreMappers.pairId
 import com.example.data.repository.FirestoreMappers.swipeId
 import com.google.firebase.Firebase
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -36,7 +38,7 @@ import java.util.Locale
 class AppRepository(
     private val db: FirebaseFirestore = Firebase.firestore,
     private val storage: FirebaseStorage = Firebase.storage
-) {
+) : AppBackend {
     companion object {
         private const val TAG = "AppRepository"
         private const val DISCOVERY_LIMIT = 200L
@@ -53,11 +55,11 @@ class AppRepository(
 
     // ---------------------------------------------------------------- profile
 
-    suspend fun isAdmin(uid: String): Boolean =
+    override suspend fun isAdmin(uid: String): Boolean =
         runCatching { db.collection("admins").document(uid).get().await().exists() }.getOrDefault(false)
 
     /** Streams the signed-in user's own profile; emits null until onboarding has created it. */
-    fun observeOwnProfile(uid: String, email: String, isAdmin: Boolean): Flow<UserEntity?> = callbackFlow {
+    override fun observeOwnProfile(uid: String, email: String, isAdmin: Boolean): Flow<UserEntity?> = callbackFlow {
         val reg = users.document(uid).addSnapshotListener { snap, error ->
             if (error != null) {
                 Log.w(TAG, "Profile listener failed", error)
@@ -73,7 +75,7 @@ class AppRepository(
         awaitClose { reg.remove() }
     }
 
-    suspend fun createProfile(uid: String, email: String, profile: UserProfile, isAdmin: Boolean): Result<Unit> = runCatching {
+    override suspend fun createProfile(uid: String, email: String, profile: UserProfile, isAdmin: Boolean): Result<Unit> = runCatching {
         val photoUrl = resolvePhoto(uid, profile.photoUri)
         val data = FirestoreMappers.userToMap(
             id = uid,
@@ -85,11 +87,10 @@ class AppRepository(
         privateProfiles.document(uid)
             .set(mapOf("email" to email, "createdAt" to FieldValue.serverTimestamp()), SetOptions.merge()).await()
         users.document(uid).set(data).await()
-        Unit
     }
 
     /** Edits the editable profile fields; moderation fields are untouched (and protected by the rules). */
-    suspend fun updateProfile(uid: String, profile: UserProfile): Result<Unit> = runCatching {
+    override suspend fun updateProfile(uid: String, profile: UserProfile): Result<Unit> = runCatching {
         val photoUrl = resolvePhoto(uid, profile.photoUri)
         users.document(uid).update(
             mapOf(
@@ -103,7 +104,6 @@ class AppRepository(
                 "updatedAt" to FieldValue.serverTimestamp()
             ) + FirestoreMappers.profileDetailsToMap(profile)
         ).await()
-        Unit
     }
 
     /** Uploads a newly picked photo, keeps an already-uploaded one, or deletes the photo when removed. */
@@ -125,34 +125,34 @@ class AppRepository(
     // ---------------------------------------------------------------- push notifications
 
     /** Stores this device's FCM token so Cloud Functions can notify the student. */
-    suspend fun registerPushToken(uid: String, email: String, token: String) {
+    override suspend fun registerPushToken(uid: String, email: String, token: String) {
         privateProfiles.document(uid)
             .set(mapOf("email" to email, "fcmTokens" to FieldValue.arrayUnion(token)), SetOptions.merge()).await()
     }
 
-    suspend fun unregisterPushToken(uid: String, email: String, token: String) {
+    override suspend fun unregisterPushToken(uid: String, email: String, token: String) {
         privateProfiles.document(uid)
             .set(mapOf("email" to email, "fcmTokens" to FieldValue.arrayRemove(token)), SetOptions.merge()).await()
     }
 
-    fun observePushEnabled(uid: String): Flow<Boolean> = callbackFlow {
+    override fun observePushEnabled(uid: String): Flow<Boolean> = callbackFlow {
         val reg = privateProfiles.document(uid).addSnapshotListener { snap, _ ->
             trySend(snap?.getBoolean("pushEnabled") ?: true)
         }
         awaitClose { reg.remove() }
     }
 
-    suspend fun setPushEnabled(uid: String, email: String, enabled: Boolean) {
+    override suspend fun setPushEnabled(uid: String, email: String, enabled: Boolean) {
         privateProfiles.document(uid).set(mapOf("email" to email, "pushEnabled" to enabled), SetOptions.merge()).await()
     }
 
-    suspend fun getUser(id: String): UserEntity? = fetchUser(id)
+    override suspend fun getUser(id: String): UserEntity? = fetchUser(id)
 
-    suspend fun updateVisibility(uid: String, visible: Boolean) {
+    override suspend fun updateVisibility(uid: String, visible: Boolean) {
         users.document(uid).update(mapOf("visible" to visible, "updatedAt" to FieldValue.serverTimestamp())).await()
     }
 
-    suspend fun updateShowBadges(uid: String, showBadges: Boolean) {
+    override suspend fun updateShowBadges(uid: String, showBadges: Boolean) {
         users.document(uid).update(mapOf("showBadges" to showBadges, "updatedAt" to FieldValue.serverTimestamp())).await()
     }
 
@@ -162,7 +162,7 @@ class AppRepository(
      * Visible, non-suspended students the user hasn't swiped on or blocked (in either direction).
      * Campus-scale: the whole visible roster fits in one query.
      */
-    fun discoveryCandidates(uid: String): Flow<List<UserEntity>> {
+    override fun discoveryCandidates(uid: String): Flow<List<UserEntity>> {
         val roster = users.whereEqualTo("visible", true).whereEqualTo("suspended", false)
             .limit(DISCOVERY_LIMIT).snapshots { id, data -> FirestoreMappers.userFromMap(id, data) }
         val swiped = swipes.whereEqualTo("from", uid).snapshots { _, data -> data["to"] as? String }
@@ -173,7 +173,7 @@ class AppRepository(
     }
 
     /** Records a swipe; for likes, creates the match when the other student already liked back. */
-    suspend fun recordSwipe(uid: String, targetId: String, action: String): Boolean {
+    override suspend fun recordSwipe(uid: String, targetId: String, action: String): Boolean {
         swipes.document(swipeId(uid, targetId)).set(
             mapOf("from" to uid, "to" to targetId, "action" to action, "createdAt" to FieldValue.serverTimestamp())
         ).await()
@@ -198,7 +198,7 @@ class AppRepository(
     }
 
     /** Brings back everyone the user passed on. Likes are kept so pending matches still work. */
-    suspend fun resetPasses(uid: String) {
+    override suspend fun resetPasses(uid: String) {
         val passes = swipes.whereEqualTo("from", uid).whereEqualTo("action", "PASS").get().await()
         passes.documents.chunked(400).forEach { chunk ->
             db.runBatch { batch -> chunk.forEach { batch.delete(it.reference) } }.await()
@@ -207,7 +207,7 @@ class AppRepository(
 
     // ---------------------------------------------------------------- matches & chat
 
-    fun matchedUsers(uid: String): Flow<List<UserEntity>> {
+    override fun matchedUsers(uid: String): Flow<List<UserEntity>> {
         val partnerIds = matches.whereArrayContains("users", uid)
             .orderBy("lastMessageAt", Query.Direction.DESCENDING)
             .snapshots { _, data -> (data["users"] as? List<*>)?.firstOrNull { it != uid } as? String }
@@ -220,7 +220,7 @@ class AppRepository(
         snap.data?.let { FirestoreMappers.userFromMap(id, it) }
     }.getOrNull()
 
-    fun messages(uid: String, partnerId: String): Flow<List<ChatMessage>> = callbackFlow {
+    override fun messages(uid: String, partnerId: String): Flow<List<ChatMessage>> = callbackFlow {
         val reg = matches.document(pairId(uid, partnerId)).collection("messages")
             .orderBy("createdAt", Query.Direction.ASCENDING)
             .limitToLast(500)
@@ -232,13 +232,13 @@ class AppRepository(
                     return@addSnapshotListener
                 }
                 trySend(snap?.documents.orEmpty().map {
-                    FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), it.metadata.hasPendingWrites())
+                    FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), it.metadata.hasPendingWrites(), ::timestampMillis)
                 })
             }
         awaitClose { reg.remove() }
     }
 
-    suspend fun sendMessage(uid: String, partnerId: String, text: String) {
+    override suspend fun sendMessage(uid: String, partnerId: String, text: String) {
         val match = matches.document(pairId(uid, partnerId))
         val trimmed = text.trim().take(2000)
         db.runBatch { batch ->
@@ -253,7 +253,7 @@ class AppRepository(
         }.await()
     }
 
-    suspend fun unmatch(uid: String, partnerId: String) {
+    override suspend fun unmatch(uid: String, partnerId: String) {
         matches.document(pairId(uid, partnerId)).delete().await()
     }
 
@@ -266,14 +266,14 @@ class AppRepository(
     }
 
     /** Blocks a student: hides them both ways and ends any match. */
-    suspend fun blockUser(uid: String, targetId: String) {
+    override suspend fun blockUser(uid: String, targetId: String) {
         blocks.document(blockId(uid, targetId)).set(
             mapOf("blocker" to uid, "blocked" to targetId, "createdAt" to FieldValue.serverTimestamp())
         ).await()
         runCatching { unmatch(uid, targetId) }
     }
 
-    suspend fun reportUser(
+    override suspend fun reportUser(
         reporter: UserEntity,
         target: UserEntity,
         reason: String,
@@ -292,14 +292,13 @@ class AppRepository(
                 "createdAt" to FieldValue.serverTimestamp()
             )
         ).await()
-        Unit
     }
 
     private suspend fun buildTranscript(reporter: UserEntity, target: UserEntity): String {
         val recent = runCatching {
             matches.document(pairId(reporter.id, target.id)).collection("messages")
                 .orderBy("createdAt", Query.Direction.DESCENDING).limit(TRANSCRIPT_MESSAGES).get().await()
-                .documents.map { FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false) }.reversed()
+                .documents.map { FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false, ::timestampMillis) }.reversed()
         }.getOrDefault(emptyList())
         if (recent.isEmpty()) return "[No chat history between these students. Profile content reported.]"
         val fmt = SimpleDateFormat("dd MMM HH:mm", Locale.getDefault())
@@ -313,7 +312,7 @@ class AppRepository(
      * Removes the student's data (photo, swipes, blocks, matches, own messages, profile).
      * The Firebase Auth account itself is deleted afterwards by the caller via AuthService.
      */
-    suspend fun deleteAllUserData(uid: String) {
+    override suspend fun deleteAllUserData(uid: String) {
         runCatching { storage.reference.child("profilePhotos/$uid/avatar.jpg").delete().await() }
 
         val myMatches = matches.whereArrayContains("users", uid).get().await().documents
@@ -332,11 +331,11 @@ class AppRepository(
 
     // ---------------------------------------------------------------- admin
 
-    fun allReports(): Flow<List<ReportEntity>> =
+    override fun allReports(): Flow<List<ReportEntity>> =
         reports.orderBy("createdAt", Query.Direction.DESCENDING).limit(500)
-            .snapshots { id, data -> FirestoreMappers.reportFromMap(id, data) }
+            .snapshots { id, data -> FirestoreMappers.reportFromMap(id, data, ::timestampMillis) }
 
-    fun allUsersWithEmails(): Flow<List<UserEntity>> {
+    override fun allUsersWithEmails(): Flow<List<UserEntity>> {
         val people = users.snapshots { id, data -> FirestoreMappers.userFromMap(id, data) }
         val emails = privateProfiles.snapshots { id, data -> id to (data["email"] as? String ?: "") }
         return combine(people, emails) { list, emailPairs ->
@@ -345,9 +344,9 @@ class AppRepository(
         }
     }
 
-    fun auditTrail(): Flow<List<AuditLogEntity>> =
+    override fun auditTrail(): Flow<List<AuditLogEntity>> =
         auditLogs.orderBy("createdAt", Query.Direction.DESCENDING).limit(500)
-            .snapshots { id, data -> FirestoreMappers.auditLogFromMap(id, data) }
+            .snapshots { id, data -> FirestoreMappers.auditLogFromMap(id, data, ::timestampMillis) }
 
     private suspend fun audit(admin: UserEntity, action: String, targetId: String, targetEmail: String, reason: String) {
         auditLogs.add(
@@ -363,7 +362,7 @@ class AppRepository(
         ).await()
     }
 
-    suspend fun adminResolveReport(admin: UserEntity, report: ReportEntity, status: String, note: String, suspend: Boolean) {
+    override suspend fun adminResolveReport(admin: UserEntity, report: ReportEntity, status: String, note: String, suspend: Boolean) {
         reports.document(report.id).update(
             mapOf("status" to status, "adminNote" to note, "resolvedAt" to FieldValue.serverTimestamp(), "resolvedBy" to admin.id)
         ).await()
@@ -379,23 +378,23 @@ class AppRepository(
         users.document(uid).update(mapOf("suspended" to suspended, "updatedAt" to FieldValue.serverTimestamp())).await()
     }
 
-    suspend fun adminToggleSuspension(admin: UserEntity, target: UserEntity, suspended: Boolean, reason: String) {
+    override suspend fun adminToggleSuspension(admin: UserEntity, target: UserEntity, suspended: Boolean, reason: String) {
         setSuspended(target.id, suspended)
         audit(admin, if (suspended) "SUSPENDED_USER" else "REINSTATED_USER", target.id, target.email, reason)
     }
 
-    suspend fun adminToggleVerification(admin: UserEntity, target: UserEntity, verified: Boolean) {
+    override suspend fun adminToggleVerification(admin: UserEntity, target: UserEntity, verified: Boolean) {
         users.document(target.id).update(mapOf("verified" to verified, "updatedAt" to FieldValue.serverTimestamp())).await()
         audit(admin, if (verified) "VERIFIED_STUDENT" else "REVOKED_VERIFICATION", target.id, target.email, "Manual verification change")
     }
 
     /** Reads every conversation of a student for an emergency investigation; always audit-logged first. */
-    suspend fun adminEmergencyAudit(admin: UserEntity, target: UserEntity, justification: String): List<String> {
+    override suspend fun adminEmergencyAudit(admin: UserEntity, target: UserEntity, justification: String): List<String> {
         audit(admin, "EMERGENCY_CHAT_AUDIT_ACCESSED", target.id, target.email, "Justification: $justification")
         val fmt = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault())
         return matches.whereArrayContains("users", target.id).get().await().documents.flatMap { match ->
             match.reference.collection("messages").orderBy("createdAt").get().await().documents.map {
-                val msg = FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false)
+                val msg = FirestoreMappers.messageFromMap(it.id, it.data.orEmpty(), false, ::timestampMillis)
                 val who = if (msg.senderId == target.id) target.name else "match ${match.id.replace(target.id, "").trim('_').take(6)}"
                 "[${fmt.format(Date(msg.timestamp))}] $who: ${msg.text}"
             }
@@ -415,4 +414,6 @@ class AppRepository(
         }
         awaitClose { reg.remove() }
     }
+
+    private fun timestampMillis(value: Any?): Long? = (value as? Timestamp)?.toDate()?.time
 }

@@ -28,3 +28,11 @@ node_modules/
 
 # Firebase CLI deploy cache
 .firebase/
+
+# Kotlin Multiplatform / iOS
+/shared/build
+/iosApp/RSETSparks.xcodeproj
+/iosApp/build
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/

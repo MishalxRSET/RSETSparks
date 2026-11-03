@@ -11,7 +11,7 @@ Work through this list top to bottom. Items marked **(you)** need your accounts 
 - [ ] Firebase project set up as described in [FIREBASE_SETUP.md](FIREBASE_SETUP.md).
 - [ ] Legal pages online. `node scripts/setup-firebase.mjs` deploys `docs/` (privacy policy, terms, account deletion)
   to **Firebase Hosting** at `https://<project-id>.web.app/` and updates the app's links. This works with a private repo.
-- [ ] Decide the public support email. It is currently your student email in `strings.xml` and `docs/*.html`.
+- [ ] Decide the public support email. It is currently your student email in `shared/src/commonMain/kotlin/com/example/AppLinks.kt` and `docs/*.html`.
 
 ## 1. Create the upload key (you, once — keep it forever)
 

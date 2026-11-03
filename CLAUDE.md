@@ -1,8 +1,9 @@
 # RSETSparks: notes for Claude Code
 
-Campus dating app for verified Rajagiri students (18+). Native Android (Kotlin + Jetpack Compose) on Firebase.
-The owner is preparing the first Google Play release. **Start with [HANDOFF.md](HANDOFF.md)**: it has the current
-status and the ordered checklist of what to do next on this machine.
+Campus dating app for verified Rajagiri students (18+). Kotlin Multiplatform + Compose Multiplatform on Firebase:
+one shared UI/ViewModel (`shared/`) for an Android app (`app/`) and an iOS app (`iosApp/`).
+The owner is preparing the first Google Play release; the iOS app is at the Simulator stage ([guides/IOS.md](guides/IOS.md)).
+**Start with [HANDOFF.md](HANDOFF.md)**: it has the current status and the ordered checklist of what to do next.
 
 ## First thing in every session
 
@@ -15,7 +16,8 @@ git status && git log --oneline -5
 
 | Task | Command |
 |---|---|
-| Unit tests | `./gradlew :app:testDebugUnitTest` |
+| Unit tests (shared + Android) | `./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest` |
+| Type-check the iOS Kotlin (works on Linux/Windows too) | `./gradlew :shared:compileKotlinIosSimulatorArm64` |
 | Debug build | `./gradlew :app:assembleDebug` |
 | Install on connected phone/emulator | `./gradlew :app:installDebug` |
 | Release bundle (needs `keystore.properties`) | `./gradlew :app:bundleRelease` → `app/build/outputs/bundle/release/app-release.aab` |
@@ -26,6 +28,8 @@ git status && git log --oneline -5
 | Function logs | `npx firebase-tools@14 functions:log` |
 | Regenerate icons/splash/store art | `python3 scripts/generate_brand_assets.py` |
 | App logs | `adb logcat -s AppRepository AuthService FirebaseMessaging` |
+| iOS project (Mac only) | `cd iosApp && xcodegen && open RSETSparks.xcodeproj`, then ▶ in Xcode |
+| iOS tests (Mac only) | `./gradlew :shared:iosSimulatorArm64Test` |
 
 On Windows, use `gradlew.bat` if `./gradlew` doesn't work in the current shell.
 
@@ -34,30 +38,42 @@ On Windows, use `gradlew.bat` if `./gradlew` doesn't work in the current shell.
 Run in order and keep going after a failure so the report is complete. Report a pass/fail table.
 
 1. `node scripts/doctor.mjs --json`. Missing Firebase config blocks running the app, not the tests.
-2. `./gradlew :app:testDebugUnitTest :app:assembleDebug`
+2. `./gradlew :shared:testAndroidHostTest :app:testDebugUnitTest :app:assembleDebug :shared:compileKotlinIosSimulatorArm64`
 3. `cd firebase-tests && npm ci && npm test`. All rules tests must pass; if `firestore.rules` changed, a matching test must exist.
 4. `cd functions && npm ci && npm test`
 5. If `keystore.properties` exists: `./gradlew :app:bundleRelease` (report AAB path and size; never read the keystore files).
 
 ## Layout
 
+Package/namespace is `com.example` everywhere; the store ID is `com.rsetsparks.app` on both platforms.
+
 ```
-app/src/main/java/com/example/      (namespace is com.example; applicationId is com.rsetsparks.app)
-  MainActivity.kt                   splash, session routing, notification deep links
-  RSETSparksApplication.kt          Firebase + App Check init, notification channels
-  data/model/                       plain data classes (no Room)
-  data/repository/AppRepository.kt  ALL Firestore/Storage access
+shared/src/commonMain/kotlin/com/example/    shared by Android and iOS (no android.* or platform.* imports)
+  AppLinks.kt                       privacy/terms/deletion URLs + support email (setup-firebase.mjs rewrites them)
+  data/Backends.kt                  AuthBackend, AppBackend, PushRegistrar interfaces + CampusEmail
+  data/model/                       plain data classes; UserProfile.validate (18+, required fields)
   data/repository/FirestoreMappers.kt  map <-> model conversion (unit-tested)
-  security/AuthService.kt           Firebase Auth: Google (hd=rajagiri.edu.in) + email/password
-  notifications/                    FCM service, channels, token registration
+  ui/App.kt                         RSETSparksApp(): session routing, tabs, theme (both hosts call this)
   ui/viewmodel/RSETSparksViewModel.kt  SessionState machine + all UI actions
   ui/screens/, ui/components/, ui/theme/
+  platform/PhotoPicker.kt           expect/actual camera + gallery picker
+shared/src/commonMain/composeResources/   in-app logo (generated)
+shared/src/commonTest/              DomainLogicTest (runs on Android host and iOS simulator)
+shared/src/androidMain/             Android actuals (photo picker)
+shared/src/iosMain/                 iOS actuals: MainViewController.kt, data/ios/ (Firebase via GitLive), PhotoPicker.ios.kt
+app/src/main/java/com/example/      Android host
+  MainActivity.kt                   splash, wires backends into the ViewModel, notification deep links
+  RSETSparksApplication.kt          Firebase + App Check init, notification channels
+  data/repository/AppRepository.kt  AppBackend on the official Android Firebase SDK
+  security/AuthService.kt, AndroidGoogleSignIn.kt   Firebase Auth + Credential Manager (hd=rajagiri.edu.in)
+  notifications/                    FCM service, channels, AndroidPushRegistrar
 app/src/debug|release/.../AppCheckInstaller.kt   debug vs Play Integrity provider
+iosApp/               SwiftUI shell: project.yml (XcodeGen), Info.plist, PrivacyInfo.xcprivacy, GoogleSignInBridge.swift
 functions/            Cloud Functions (Node 22, asia-south1): push on new match / message
 firestore.rules, storage.rules, firestore.indexes.json   server-side security (source of truth)
 firebase-tests/       emulator tests for the rules
 docs/                 privacy policy, terms, account deletion (deployed to Firebase Hosting)
-guides/               FIREBASE_SETUP.md, RELEASE_ANDROID.md
+guides/               FIREBASE_SETUP.md, RELEASE_ANDROID.md, IOS.md
 store/                Play listing text, Data safety answers, graphics
 scripts/              setup-firebase.mjs, doctor.mjs, generate_brand_assets.py
 ```
@@ -72,20 +88,27 @@ scripts/              setup-firebase.mjs, doctor.mjs, generate_brand_assets.py
 - New data collected → update `docs/privacy-policy.html` **and** `store/data-safety.md`.
 - Never commit or print `keystore.properties`, `*.jks`, or passwords. `app/google-services.json` and `.firebaserc` are fine to commit.
 - Moderators (`admins/{uid}`) are created only in the Firebase console, never from the app.
-- `rsetsparks.blaze` in `gradle.properties` (→ `BuildConfig.BLAZE`) says whether the Firebase project is on Blaze.
+- **Two Firebase backends, one behaviour.** Android's `AppRepository`/`AuthService` and iOS's `IosFirestoreBackend`/
+  `IosAuthBackend` must read and write the same collections and fields. Change both together and keep
+  `FirestoreMappers` as the single place that turns maps into models.
+- `rsetsparks.blaze` in `gradle.properties` (→ `BuildConfig.BLAZE` and shared `SharedBuildConfig.BLAZE`) says whether the Firebase project is on Blaze.
   When false, anything needing Cloud Storage or Cloud Functions (photos, push) must stay hidden in the app and skipped by `setup-firebase.mjs`.
-- Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts` for every Play upload.
+- Bump `versionCode` (+1) and `versionName` in `app/build.gradle.kts` for every Play upload. For App Store builds the
+  same pair lives in `iosApp/project.yml` (`CURRENT_PROJECT_VERSION`, `MARKETING_VERSION`).
 
 ## Conventions
 
 - Kotlin style matches the existing files: Compose screens take state + callbacks and the ViewModel owns logic.
-  Repository functions are `suspend` or return `Flow`.
+  Backend functions are `suspend` or return `Flow`.
+- UI and logic go in `shared/commonMain`. Only code that needs a platform API goes in `androidMain`/`iosMain`/`app/`.
+  Use kotlinx-datetime / `util/Time.kt` instead of `java.*`, and `Res.drawable.*` for images.
 - Use `MaterialTheme.colorScheme.*` for text/tint colours so dark mode works. Brand constants are in `ui/theme/Color.kt`.
 - Run unit tests plus the rules/functions tests relevant to a change before committing.
 
 ## Things only the human can do
 
 Browser sign-ins (`firebase login`, Google), Firebase console clicks (Blaze billing, enabling sign-in providers,
-Storage "Get started", App Check, creating `admins/{uid}`), Play Console, and anything that needs their passwords.
+Storage "Get started", App Check, creating `admins/{uid}`), Play Console, Apple Developer / App Store Connect,
+Xcode on a Mac, and anything that needs their passwords.
 Interactive scripts such as `node scripts/setup-firebase.mjs` need a real terminal. Ask the user to run them
 with the `!` prefix in Claude Code (`! node scripts/setup-firebase.mjs`) or in their own terminal.

@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "RSETSparks"
 
 include(":app")
+include(":shared")

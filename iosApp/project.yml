@@ -1,0 +1,66 @@
+# XcodeGen spec for the iOS app. On the Mac:  brew install xcodegen  &&  cd iosApp && xcodegen
+# This generates RSETSparks.xcodeproj (git-ignored). Re-run xcodegen after editing this file.
+# The app is a thin SwiftUI shell around the shared Kotlin/Compose module (../shared): see guides/IOS.md.
+name: RSETSparks
+
+options:
+  bundleIdPrefix: com.rsetsparks
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+configFiles:
+  Debug: Configuration/Config.xcconfig
+  Release: Configuration/Config.xcconfig
+
+packages:
+  # Must match the Firebase iOS SDK that GitLive firebase-kotlin-sdk (gradle/libs.versions.toml) was built against.
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    exactVersion: 11.8.0
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 8.0.0
+
+targets:
+  RSETSparks:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rsetsparks.app
+        PRODUCT_NAME: RSETSparks
+        INFOPLIST_FILE: iosApp/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        MARKETING_VERSION: "1.1.0"
+        CURRENT_PROJECT_VERSION: "2"
+        SWIFT_VERSION: "5.0"
+        # The Kotlin framework built by the script below.
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -ObjC -framework Shared"
+        # The Gradle build writes outside the sandbox.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: Firebase
+        product: FirebaseStorage
+      - package: GoogleSignIn
+        product: GoogleSignIn
+    preBuildScripts:
+      - name: Compile Kotlin framework
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "YES" = "$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED" ]; then
+            echo "Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \"YES\""
+            exit 0
+          fi
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode

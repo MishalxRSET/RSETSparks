@@ -41,7 +41,12 @@ jobs:
         run: echo "$UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
 
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest :shared:testAndroidHostTest
+
+      # The shared module's iOS Kotlin compiles on Linux too (klib cross-compilation), so iOS breakages
+      # show up here without spending macOS minutes. The full Xcode build is .github/workflows/ios.yml.
+      - name: Compile shared code for iOS
+        run: ./gradlew :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64
 
       - name: Build debug APK and release bundle
         env:

@@ -164,11 +164,31 @@ async function main() {
     warn('Skipped (Spark plan).');
   }
 
-  step(9, 'App config (google-services.json)');
+  step(9, 'App config (google-services.json for Android, GoogleService-Info.plist for iOS)');
   firebase(['apps:sdkconfig', 'ANDROID', app.appId, '--project', projectId, '--out', join(ROOT, 'app', 'google-services.json')]);
   const config = readFileSync(join(ROOT, 'app', 'google-services.json'), 'utf8');
   if (config.includes('"client_type": 3')) ok('Wrote app/google-services.json (includes the Google Sign-In client)');
   else warn('google-services.json has no web client: make sure Google sign-in is enabled (step 6), then re-run.');
+
+  // iOS shares the project; the bundle ID matches the Android package name.
+  const iosApps = firebase(['apps:list', 'IOS', '--project', projectId], { json: true }) || [];
+  let iosApp = iosApps.find((a) => a.bundleId === PACKAGE);
+  if (iosApp) {
+    ok(`iOS app already registered (${iosApp.appId})`);
+  } else {
+    iosApp = firebase(['apps:create', 'IOS', 'RSETSparks iOS', '--bundle-id', PACKAGE, '--project', projectId], { json: true });
+    ok(`Registered iOS app ${PACKAGE} (${iosApp.appId})`);
+  }
+  const plistPath = join(ROOT, 'iosApp', 'iosApp', 'GoogleService-Info.plist');
+  firebase(['apps:sdkconfig', 'IOS', iosApp.appId, '--project', projectId, '--out', plistPath]);
+  const reversedClientId = readFileSync(plistPath, 'utf8').match(/<key>REVERSED_CLIENT_ID<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+  if (reversedClientId) {
+    const xcconfigPath = join(ROOT, 'iosApp', 'Configuration', 'Config.xcconfig');
+    writeFileSync(xcconfigPath, readFileSync(xcconfigPath, 'utf8').replace(/^GOOGLE_REVERSED_CLIENT_ID = .*$/m, `GOOGLE_REVERSED_CLIENT_ID = ${reversedClientId}`));
+    ok('Wrote iosApp/iosApp/GoogleService-Info.plist and the Google Sign-In URL scheme in iosApp/Configuration/Config.xcconfig');
+  } else {
+    warn('GoogleService-Info.plist has no REVERSED_CLIENT_ID: enable Google sign-in (step 6), then re-run.');
+  }
 
   step(10, 'Deploy security rules, indexes, push-notification functions and legal pages');
   if (BLAZE) {
@@ -182,11 +202,11 @@ async function main() {
   // The privacy policy, terms and account-deletion pages (docs/) are served by Firebase Hosting,
   // which works with a private repo. Point the app's links at them.
   const site = `https://${projectId}.web.app`;
-  const stringsPath = join(ROOT, 'app', 'src', 'main', 'res', 'values', 'strings.xml');
-  const strings = readFileSync(stringsPath, 'utf8')
-    .replace(/https:\/\/[^<"]+?\/(privacy-policy|terms|delete-account)\.html/g, `${site}/$1.html`);
-  writeFileSync(stringsPath, strings);
-  ok(`Legal pages live at ${site}/privacy-policy.html (app links updated in strings.xml)`);
+  const linksPath = join(ROOT, 'shared', 'src', 'commonMain', 'kotlin', 'com', 'example', 'AppLinks.kt');
+  const links = readFileSync(linksPath, 'utf8')
+    .replace(/https:\/\/[^"]+?\/(privacy-policy|terms|delete-account)\.html/g, `${site}/$1.html`);
+  writeFileSync(linksPath, links);
+  ok(`Legal pages live at ${site}/privacy-policy.html (links updated in shared/.../AppLinks.kt for both apps)`);
 
   step(11, 'Almost done: things only you can do');
   console.log(`  1. Build and run the app (Android Studio ▶), sign in once with your Rajagiri account.
@@ -194,7 +214,8 @@ async function main() {
      Start collection "admins" → Document ID = your UID (from ${console_}/authentication/users)
      → field "role" = "moderator". Restart the app.
   3. Before launch: App Check → Play Integrity (guides/FIREBASE_SETUP.md §6).
-  4. Commit app/google-services.json, .firebaserc and app/src/main/res/values/strings.xml.
+  4. Commit app/google-services.json, iosApp/iosApp/GoogleService-Info.plist, iosApp/Configuration/Config.xcconfig,
+     .firebaserc and shared/src/commonMain/kotlin/com/example/AppLinks.kt.
   5. Play Console privacy policy URL: https://${projectId}.web.app/privacy-policy.html
      Account deletion URL:      https://${projectId}.web.app/delete-account.html`);
   rl.close();

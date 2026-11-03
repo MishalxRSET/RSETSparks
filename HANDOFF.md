@@ -1,6 +1,6 @@
 # Handoff: from cloud session to local Claude Code
 
-**Written:** 2026-10-28, at the point the work was merged to `main` (PR #1).
+**Written:** 2026-10-28, at the point the work was merged to `main` (PR #1). **Updated:** 2026-11-03 (iOS app added).
 **For:** Claude Code running on the owner's own computer (probably Windows), plus the owner.
 **Read with:** [CLAUDE.md](CLAUDE.md) for commands, layout and the rules that must stay true.
 
@@ -15,6 +15,10 @@ Done and verified in the cloud (no device, no real Firebase project):
 - [x] v1.1: push notifications (Cloud Functions + FCM) and profile editing. `versionName 1.1.0`, `versionCode 2`.
 - [x] Release build: `com.rsetsparks.app`, R8, signing via `keystore.properties`, App Check.
 - [x] Tests: 6 app unit tests, 21 security-rules tests, 5 function tests. CI in `.github/workflows/android.yml`.
+- [x] iOS (2026-11-03): the UI, ViewModel and models moved to a Kotlin Multiplatform module `shared/` (Compose
+      Multiplatform), used by both `app/` (Android) and the new `iosApp/` (SwiftUI shell). iOS uses the Firebase iOS SDK
+      through GitLive. The iOS Kotlin is type-checked in CI on Linux, but the iOS app has **never been built or run**:
+      that needs a Mac (§7). Android looks and behaves the same as before; retest §5 briefly after pulling.
 
 **Never tested** (impossible without the owner's accounts and a device), so this is the main job now:
 
@@ -47,7 +51,7 @@ Legend: 🤖 = Claude Code can do it alone · 👤 = needs the owner (browser, c
 - [x] 👤 Owner runs `! node scripts/setup-firebase.mjs` (interactive: browser login, then console steps for Blaze billing,
       sign-in providers and the Storage bucket). It creates the project, registers the app with fingerprints, creates Firestore
       (asia-south1), writes `app/google-services.json` and `.firebaserc`, deploys rules, indexes, functions and the
-      legal pages (Firebase Hosting), and rewrites the URLs in `strings.xml`.
+      legal pages (Firebase Hosting), and rewrites the URLs in `strings.xml` (now `shared/.../AppLinks.kt`).
 - [x] 🤖 `node scripts/doctor.mjs`: `google-services.json`, `.firebaserc` and the legal URLs should all be ✔.
 - [x] 🤖 Open `https://<project-id>.web.app/privacy-policy.html` (curl it) to confirm the policy is live.
 - [x] 🤖 Commit `app/google-services.json`, `.firebaserc`, `app/src/main/res/values/strings.xml` on a branch and open a PR.
@@ -92,6 +96,20 @@ Useful while testing: `npx firebase-tools@14 functions:log` (push problems), Fir
 - [ ] 👤 Closed test with 12+ testers for 14 days → production. Answers for the forms are in `store/`.
 - [ ] 👤 App Check: once the metrics look healthy, enforce for Firestore, Storage and Auth.
 
+### 7. iOS in the Simulator (on a Mac; details in `guides/IOS.md`)
+Needs an Apple-silicon Mac. No Apple Developer membership needed for the Simulator.
+- [ ] 👤 Install Xcode 16+ (open it once), then `brew install xcodegen node` and a JDK 17+ (`brew install --cask temurin@21`).
+- [ ] 🤖 `node scripts/doctor.mjs`: the iOS lines say what's missing.
+- [ ] 👤 `! node scripts/setup-firebase.mjs` again. It registers the iOS app, writes `iosApp/iosApp/GoogleService-Info.plist`
+      and the Google URL scheme in `iosApp/Configuration/Config.xcconfig`.
+- [ ] 🤖 Commit those two files on a branch and open a PR.
+- [ ] 🤖 `./gradlew :shared:iosSimulatorArm64Test`, then `cd iosApp && xcodegen`, then
+      `xcodebuild build -project RSETSparks.xcodeproj -scheme RSETSparks -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`.
+      Fix any Swift/link errors (the Swift files were written without a compiler).
+- [ ] 👤 `open iosApp/RSETSparks.xcodeproj`, pick an iPhone simulator, ▶ Run. Then the checklist in `guides/IOS.md`
+      (sign-up, Google sign-in, onboarding, match + chat with an Android phone, report/block, delete, dark mode).
+- [ ] 👤 Later: Apple Developer Program (US$99/yr) for a real iPhone, TestFlight, iOS push (APNs) and the App Store.
+
 ## Optional: fewer permission prompts (owner decides)
 
 To let Claude Code run the routine build and test commands without asking each time, the owner can create
@@ -121,9 +139,10 @@ To let Claude Code run the routine build and test commands without asking each t
 
 ## Open decisions for the owner
 
-- Public **support email**: currently their student email in `strings.xml` and `docs/*.html`.
+- Public **support email**: currently their student email in `shared/.../AppLinks.kt` and `docs/*.html`.
 - **Approval from Rajagiri** for using the name. The app says it's an independent student app; written approval is safer.
-- **iOS**: Compose Multiplatform (share this code) or a separate SwiftUI app. Needs a Mac and an Apple Developer account (US$99/yr).
+- **iOS**: decided: Compose Multiplatform (§7). Still open: when to join the Apple Developer Program (US$99/yr),
+  which is needed for a real iPhone, TestFlight, iOS push and the App Store.
 
 ## Known limitations
 
@@ -131,6 +150,11 @@ To let Claude Code run the routine build and test commands without asking each t
 - Messages a deleted user *received* remain in the partner's match subcollection, but the match doc is removed so
   nobody but admins can read them (stated in the privacy policy).
 - Reports older than 12 months must be deleted manually (promised in the privacy policy). Consider a scheduled function later.
+- **Before switching to Blaze:** Android camera photos are uploaded at full resolution and can exceed the 5 MB limit in
+  `storage.rules` on high-megapixel phones (the upload then fails). Downscale like iOS does (`PhotoPicker.ios.kt`, max
+  1080 px, JPEG 80%) before turning photos on. Not visible while `rsetsparks.blaze=false`.
+- iOS has no push notifications yet (needs APNs, so the Apple Developer membership). Steps are in `guides/IOS.md`.
+- iOS needs an Apple-silicon Mac: Compose Multiplatform 1.12 dropped Intel simulators.
 
 ## Handoff log
 
@@ -155,3 +179,8 @@ Append a line per session: date, what was done, what's next.
   looking for, pronouns; existing accounts are asked once. Rules + privacy page deployed, fast-forwarded to `main`.
   §5 passed on two phones (Spark plan: photo upload and push checks N/A, retest them if the project moves to Blaze).
   Next: §2 upload key, then §6.
+- 2026-11-03 (cloud): iOS groundwork. Moved UI/ViewModel/models into the KMP module `shared/` (Compose Multiplatform
+  1.12, Kotlin 2.4, compileSdk 37), Android host now in `app/` only wires Firebase, Google sign-in and FCM. Added the
+  iOS Firebase backend (GitLive), photo picker, `iosApp/` (XcodeGen, SwiftUI, Google Sign-In, privacy manifest, icons),
+  iOS registration in `setup-firebase.mjs`, iOS checks in `doctor.mjs`, `guides/IOS.md`, CI type-check of the iOS
+  Kotlin and a manual macOS workflow (`ios.yml`). Next: quick §5 regression on Android, then §7 on a Mac.

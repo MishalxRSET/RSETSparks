@@ -21,7 +21,7 @@ function run(cmd, args) {
   return { ok: r.status === 0, out: `${r.stdout || ''}${r.stderr || ''}`.trim() };
 }
 
-/** level: 'required' blocks a local build; 'release' is needed before publishing; 'optional' is nice to have. */
+/** level: 'required' blocks a local Android build; 'ios' is needed for the iOS app; 'release' before publishing; 'optional' is nice to have. */
 function check(id, level, label, fn) {
   try {
     const { ok, detail, fix } = fn();
@@ -99,14 +99,39 @@ check('firebaserc', 'required', '.firebaserc (default project)', () => {
 });
 
 check('legal-urls', 'release', 'Privacy/terms/deletion URLs point at Firebase Hosting', () => {
-  const s = readFileSync(join(ROOT, 'app', 'src', 'main', 'res', 'values', 'strings.xml'), 'utf8');
-  const urls = [...s.matchAll(/https:\/\/[^<]+\.html/g)].map((m) => m[0]);
+  const s = readFileSync(join(ROOT, 'shared', 'src', 'commonMain', 'kotlin', 'com', 'example', 'AppLinks.kt'), 'utf8');
+  const urls = [...s.matchAll(/https:\/\/[^"]+\.html/g)].map((m) => m[0]);
   return {
     ok: urls.length === 3 && urls.every((u) => u.includes('.web.app/') || u.includes('.firebaseapp.com/')),
     detail: urls.join(' '),
     fix: 'Run node scripts/setup-firebase.mjs (it deploys docs/ to Firebase Hosting and rewrites these URLs)',
   };
 });
+
+check('ios-firebase-config', 'ios', 'iosApp/iosApp/GoogleService-Info.plist + URL scheme', () => {
+  const plist = join(ROOT, 'iosApp', 'iosApp', 'GoogleService-Info.plist');
+  const xcconfig = readFileSync(join(ROOT, 'iosApp', 'Configuration', 'Config.xcconfig'), 'utf8');
+  const schemeSet = !/GOOGLE_REVERSED_CLIENT_ID = com\.googleusercontent\.apps\.REPLACE_ME/.test(xcconfig);
+  return {
+    ok: existsSync(plist) && schemeSet,
+    detail: `${existsSync(plist) ? 'plist present' : 'plist missing'}, ${schemeSet ? 'URL scheme set' : 'URL scheme not set'}`,
+    fix: 'Run: node scripts/setup-firebase.mjs (registers the iOS app and writes both)',
+  };
+});
+
+if (process.platform === 'darwin') {
+  check('xcode', 'ios', 'Xcode command-line tools', () => {
+    const r = run('xcodebuild', ['-version']);
+    return { ok: r.ok, detail: r.ok ? r.out.split('\n')[0] : 'not found', fix: 'Install Xcode from the App Store, then: sudo xcode-select -s /Applications/Xcode.app' };
+  });
+  check('xcodegen', 'ios', 'XcodeGen (generates iosApp/RSETSparks.xcodeproj)', () => {
+    const r = run('xcodegen', ['--version']);
+    return { ok: r.ok, detail: r.ok ? r.out : 'not found', fix: 'brew install xcodegen' };
+  });
+  check('apple-silicon', 'ios', 'Apple-silicon Mac (iOS Simulator target is arm64 only)', () => ({
+    ok: process.arch === 'arm64', detail: process.arch, fix: 'Compose Multiplatform no longer builds for Intel simulators; use an M-series Mac',
+  }));
+}
 
 check('upload-key', 'release', 'Upload key (keystore.properties + .jks)', () => {
   const p = join(ROOT, 'keystore.properties');

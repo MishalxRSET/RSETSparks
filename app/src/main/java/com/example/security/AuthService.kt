@@ -1,14 +1,14 @@
 package com.example.security
 
-import android.app.Activity
 import android.content.Context
 import android.util.Log
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
-import androidx.credentials.CustomCredential
-import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
-import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.example.data.AuthBackend
+import com.example.data.AuthUser
+import com.example.data.CampusEmail
+import com.example.data.CampusEmail.MIN_PASSWORD_LENGTH
+import com.example.data.GoogleTokens
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
@@ -25,95 +25,70 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
 /**
- * Firebase Authentication restricted to @rajagiri.edu.in accounts.
- * Supports Google Sign-In (Rajagiri runs on Google Workspace) and email + password with a
- * verification link.
+ * Firebase Authentication (Android SDK) restricted to @rajagiri.edu.in accounts.
+ * Supports Google Sign-In (Rajagiri runs on Google Workspace; the account picker is [AndroidGoogleSignIn])
+ * and email + password with a verification link.
  */
-class AuthService(private val auth: FirebaseAuth = Firebase.auth) {
+class AuthService(context: Context, private val auth: FirebaseAuth = Firebase.auth) : AuthBackend {
 
-    companion object {
-        private const val TAG = "AuthService"
-        const val CAMPUS_DOMAIN = "@rajagiri.edu.in"
-        const val MIN_PASSWORD_LENGTH = 8
-
-        fun isRajagiriEmail(email: String?): Boolean {
-            val clean = email?.trim()?.lowercase() ?: return false
-            return clean.endsWith(CAMPUS_DOMAIN) && clean.length > CAMPUS_DOMAIN.length
-        }
+    private companion object {
+        const val TAG = "AuthService"
     }
 
-    val currentUser: FirebaseUser? get() = auth.currentUser
+    private val credentialManager = CredentialManager.create(context.applicationContext)
 
-    /** Emits the signed-in Firebase user (or null) whenever the auth state changes. */
-    fun authState(): Flow<FirebaseUser?> = callbackFlow {
-        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser) }
+    override val currentUser: AuthUser? get() = auth.currentUser?.toAuthUser()
+
+    override fun authState(): Flow<AuthUser?> = callbackFlow {
+        val listener = FirebaseAuth.AuthStateListener { trySend(it.currentUser?.toAuthUser()) }
         auth.addAuthStateListener(listener)
         awaitClose { auth.removeAuthStateListener(listener) }
     }
 
-    suspend fun signInWithGoogle(context: Context, credentialManager: CredentialManager): Result<FirebaseUser> {
-        val activity = context as? Activity
-            ?: return Result.failure(IllegalStateException("Google Sign-In needs an Activity."))
-        // Read by name so the app still compiles before app/google-services.json is added.
-        val clientIdRes = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        if (clientIdRes == 0) {
-            return Result.failure(IllegalStateException("Google Sign-In isn't configured yet (missing google-services.json)."))
+    override suspend fun signInWithGoogle(tokens: GoogleTokens): Result<AuthUser> = runCatching {
+        val credential = GoogleAuthProvider.getCredential(tokens.idToken, tokens.accessToken)
+        val user = auth.signInWithCredential(credential).await().user ?: error("Sign-in returned no user.")
+        if (!CampusEmail.isRajagiri(user.email)) {
+            signOut()
+            throw SecurityException("${user.email} isn't a Rajagiri account. Please use your @rajagiri.edu.in Google account.")
         }
-        return runCatching {
-            val option = GetSignInWithGoogleOption.Builder(serverClientId = context.getString(clientIdRes))
-                .setHostedDomainFilter("rajagiri.edu.in")
-                .build()
-            val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
-            val credential = credentialManager.getCredential(activity, request).credential
-            check(credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
-                "Unexpected credential type."
-            }
-            val idToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
-            val user = auth.signInWithCredential(GoogleAuthProvider.getCredential(idToken, null)).await().user
-                ?: error("Sign-in returned no user.")
-            if (!isRajagiriEmail(user.email)) {
-                signOut(credentialManager)
-                throw SecurityException("${user.email} isn't a Rajagiri account. Please use your @rajagiri.edu.in Google account.")
-            }
-            user
-        }.onFailure { Log.w(TAG, "Google sign-in failed", it) }
-    }
+        user.toAuthUser()
+    }.onFailure { Log.w(TAG, "Google sign-in failed", it) }
 
-    suspend fun signUpWithEmail(email: String, password: String): Result<FirebaseUser> {
+    override suspend fun signUpWithEmail(email: String, password: String): Result<AuthUser> {
         val clean = email.trim().lowercase()
-        if (!isRajagiriEmail(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
+        if (!CampusEmail.isRajagiri(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
         if (password.length < MIN_PASSWORD_LENGTH) {
             return Result.failure(IllegalArgumentException("Password must be at least $MIN_PASSWORD_LENGTH characters."))
         }
         return runCatching {
             val user = auth.createUserWithEmailAndPassword(clean, password).await().user ?: error("No user created.")
             user.sendEmailVerification().await()
-            user
+            user.toAuthUser()
         }.mapError()
     }
 
-    suspend fun signInWithEmail(email: String, password: String): Result<FirebaseUser> {
+    override suspend fun signInWithEmail(email: String, password: String): Result<AuthUser> {
         val clean = email.trim().lowercase()
-        if (!isRajagiriEmail(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
+        if (!CampusEmail.isRajagiri(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
         return runCatching {
-            auth.signInWithEmailAndPassword(clean, password).await().user ?: error("No user returned.")
+            (auth.signInWithEmailAndPassword(clean, password).await().user ?: error("No user returned.")).toAuthUser()
         }.mapError()
     }
 
-    suspend fun sendPasswordReset(email: String): Result<Unit> {
+    override suspend fun sendPasswordReset(email: String): Result<Unit> {
         val clean = email.trim().lowercase()
-        if (!isRajagiriEmail(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
+        if (!CampusEmail.isRajagiri(clean)) return Result.failure(SecurityException("Use your @rajagiri.edu.in email address."))
         return runCatching { auth.sendPasswordResetEmail(clean).await(); Unit }.mapError()
     }
 
-    suspend fun sendEmailVerification(): Result<Unit> = runCatching {
+    override suspend fun sendEmailVerification(): Result<Unit> = runCatching {
         val user = auth.currentUser ?: error("Not signed in.")
         user.sendEmailVerification().await()
         Unit
     }.mapError()
 
-    /** Reloads the user from Firebase and refreshes the ID token so security rules see email_verified. */
-    suspend fun reloadAndCheckVerified(): Boolean {
+    override suspend fun reloadAndCheckVerified(): Boolean {
         val user = auth.currentUser ?: return false
         return runCatching {
             user.reload().await()
@@ -123,19 +98,12 @@ class AuthService(private val auth: FirebaseAuth = Firebase.auth) {
         }.getOrDefault(false)
     }
 
-    suspend fun signOut(credentialManager: CredentialManager?) {
+    override suspend fun signOut() {
         auth.signOut()
-        runCatching { credentialManager?.clearCredentialState(ClearCredentialStateRequest()) }
+        runCatching { credentialManager.clearCredentialState(ClearCredentialStateRequest()) }
     }
 
-    /** Firebase only lets an account delete itself shortly after signing in. */
-    fun hasRecentLogin(maxAgeMillis: Long = 4 * 60 * 1000L): Boolean {
-        val lastSignIn = auth.currentUser?.metadata?.lastSignInTimestamp ?: return false
-        return System.currentTimeMillis() - lastSignIn < maxAgeMillis
-    }
-
-    /** Deletes the Firebase Auth account. Fails with [RecentLoginRequired] if the session is too old. */
-    suspend fun deleteCurrentUser(): Result<Unit> = runCatching {
+    override suspend fun deleteCurrentUser(): Result<Unit> = runCatching {
         val user = auth.currentUser ?: error("Not signed in.")
         user.delete().await()
         Unit
@@ -144,6 +112,14 @@ class AuthService(private val auth: FirebaseAuth = Firebase.auth) {
     }
 
     class RecentLoginRequired : Exception("For your security, please sign out and sign in again, then retry deleting your account.")
+
+    private fun FirebaseUser.toAuthUser() = AuthUser(
+        uid = uid,
+        email = email.orEmpty(),
+        isEmailVerified = isEmailVerified,
+        displayName = displayName.orEmpty(),
+        lastSignInMillis = metadata?.lastSignInTimestamp
+    )
 
     private fun <T> Result<T>.mapError(): Result<T> = recoverCatching { e ->
         throw IllegalStateException(
