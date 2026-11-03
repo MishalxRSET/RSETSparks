@@ -18,6 +18,7 @@ import platform.PhotosUI.PHPickerResult
 import platform.PhotosUI.PHPickerViewController
 import platform.PhotosUI.PHPickerViewControllerDelegateProtocol
 import platform.UIKit.UIGraphicsImageRenderer
+import platform.UIKit.UIGraphicsImageRendererFormat
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
 import platform.UIKit.UIImagePickerController
@@ -29,13 +30,11 @@ import platform.UIKit.UIViewController
 import platform.darwin.NSObject
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * Gallery via PHPickerViewController (no photo-library permission needed) and camera via
- * UIImagePickerController (needs NSCameraUsageDescription in Info.plist). Photos are scaled to at most
- * 1080 px and saved as JPEG in the temp directory; [onPicked] gets its file:// URL.
+ * UIImagePickerController (needs NSCameraUsageDescription in Info.plist). Photos are scaled to
+ * [PhotoSizing.MAX_SIDE] px and saved as JPEG in the temp directory; [onPicked] gets its file:// URL.
  */
 @Composable
 actual fun rememberPhotoPicker(onPicked: (String) -> Unit, onError: (String) -> Unit): PhotoPicker {
@@ -97,21 +96,17 @@ private class IosPhotoPicker(
     }
 
     private fun save(image: UIImage) {
-        val (width, height) = image.size.useContents { width to height }
-        val scale = min(1.0, MAX_SIDE / max(width, height))
-        val resized = if (scale < 1.0) {
-            UIGraphicsImageRenderer(size = CGSizeMake(width * scale, height * scale)).imageWithActions { _ ->
-                image.drawInRect(CGRectMake(0.0, 0.0, width * scale, height * scale))
-            }
-        } else {
-            image
-        }
-        val jpeg = UIImageJPEGRepresentation(resized, 0.8) ?: return onError("Couldn't prepare the photo.")
+        // UIImage.size is in points and already accounts for orientation; scale gives pixels.
+        val (pixelWidth, pixelHeight) = image.size.useContents { width * image.scale to height * image.scale }
+        if (pixelWidth < 1.0 || pixelHeight < 1.0) return onError("Couldn't read the photo.")
+        val (width, height) = PhotoSizing.targetSize(pixelWidth.toInt(), pixelHeight.toInt())
+        // Render at 1 pt = 1 px. The default format uses the screen scale and would make it 2-3x bigger.
+        val format = UIGraphicsImageRendererFormat.defaultFormat().apply { scale = 1.0 }
+        val upright = UIGraphicsImageRenderer(size = CGSizeMake(width.toDouble(), height.toDouble()), format = format)
+            .imageWithActions { _ -> image.drawInRect(CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble())) }
+        val jpeg = UIImageJPEGRepresentation(upright, PhotoSizing.JPEG_QUALITY / 100.0)
+            ?: return onError("Couldn't prepare the photo.")
         val url = NSURL.fileURLWithPath("${NSTemporaryDirectory()}avatar_${NSUUID().UUIDString}.jpg")
         if (jpeg.writeToURL(url, atomically = true)) onPicked(url.absoluteString ?: return) else onError("Couldn't save the photo.")
-    }
-
-    private companion object {
-        const val MAX_SIDE = 1080.0
     }
 }

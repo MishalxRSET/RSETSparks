@@ -56,7 +56,7 @@ shared/src/commonMain/kotlin/com/example/    shared by Android and iOS (no andro
   ui/App.kt                         RSETSparksApp(): session routing, tabs, theme (both hosts call this)
   ui/viewmodel/RSETSparksViewModel.kt  SessionState machine + all UI actions
   ui/screens/, ui/components/, ui/theme/
-  platform/PhotoPicker.kt           expect/actual camera + gallery picker
+  platform/PhotoPicker.kt           expect/actual camera + gallery picker; PhotoSizing.kt = 1080 px JPEG for both
 shared/src/commonMain/composeResources/   in-app logo (generated)
 shared/src/commonTest/              DomainLogicTest (runs on Android host and iOS simulator)
 shared/src/androidMain/             Android actuals (photo picker)

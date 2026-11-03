@@ -150,9 +150,6 @@ To let Claude Code run the routine build and test commands without asking each t
 - Messages a deleted user *received* remain in the partner's match subcollection, but the match doc is removed so
   nobody but admins can read them (stated in the privacy policy).
 - Reports older than 12 months must be deleted manually (promised in the privacy policy). Consider a scheduled function later.
-- **Before switching to Blaze:** Android camera photos are uploaded at full resolution and can exceed the 5 MB limit in
-  `storage.rules` on high-megapixel phones (the upload then fails). Downscale like iOS does (`PhotoPicker.ios.kt`, max
-  1080 px, JPEG 80%) before turning photos on. Not visible while `rsetsparks.blaze=false`.
 - iOS has no push notifications yet (needs APNs, so the Apple Developer membership). Steps are in `guides/IOS.md`.
 - iOS needs an Apple-silicon Mac: Compose Multiplatform 1.12 dropped Intel simulators.
 
@@ -184,3 +181,7 @@ Append a line per session: date, what was done, what's next.
   iOS Firebase backend (GitLive), photo picker, `iosApp/` (XcodeGen, SwiftUI, Google Sign-In, privacy manifest, icons),
   iOS registration in `setup-firebase.mjs`, iOS checks in `doctor.mjs`, `guides/IOS.md`, CI type-check of the iOS
   Kotlin and a manual macOS workflow (`ios.yml`). Next: quick §5 regression on Android, then §7 on a Mac.
+- 2026-11-03 (cloud): profile photos are now downscaled before upload on both platforms (`PhotoSizing`: long side
+  1080 px, JPEG 80, EXIF-upright), so phone-camera photos stay far below the 5 MB `storage.rules` limit. Android does it
+  off the main thread in `PhotoDownscale.kt` (Robolectric-tested on API 27 and 34); iOS renders at 1 px per point (it was
+  rendering at the screen scale, 2-3x too big). On Blaze, retest: camera + gallery photo in onboarding and edit profile.
